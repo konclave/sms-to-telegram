@@ -1,0 +1,22 @@
+[Unit]
+Description=SMS to Telegam Proxy Container
+# OnFailure=quadlet-notify@%n
+
+[Container]
+Image=docker.io/kutovoys/sms-to-telegram:latest
+EnvironmentFile=/etc/systemd-notify.env
+Environment=DEVICE=/dev/ttyUSB0
+# Env vars are set up in the env file (see the path above)
+# Environment=PIN=xxxx
+# Environment=BOT_TOKEN=xxxx:xxxx
+# Environment=CHAT_ID=xxxx
+ContainerName=sms-to-telegram
+AddDevice=/dev/serial/by-id/usb-HUAWEI_Technologies_HUAWEI_Mobile-if00-port0:/dev/ttyUSB0
+# AddDevice=/dev/ttyUSB2:/dev/ttyUSB0
+
+[Service]
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target default.target

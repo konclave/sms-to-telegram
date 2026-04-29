@@ -15,3 +15,18 @@ def test_readme_documents_local_quadlet_deploy_tracking():
     assert "localhost/sms-to-telegram:latest" in readme
     assert ".deploy/sms-to-telegram-state.json" in readme
     assert "build skipped: fingerprint unchanged" in readme
+
+
+def test_repo_uses_uv_packaging_metadata():
+    pyproject = Path("pyproject.toml").read_text()
+
+    assert 'requires-python = ">=3.14,<3.15"' in pyproject
+    assert "[project.optional-dependencies]" in pyproject
+    assert 'dev = ["pytest==8.4.1"]' in pyproject
+    assert '[project.scripts]' in pyproject
+    assert 'sms-forwarder-enqueue = "sms_forwarder.enqueue_hook:main"' in pyproject
+    assert 'sms-forwarder-worker = "sms_forwarder.worker:main"' in pyproject
+    assert 'sms-forwarder-healthcheck = "sms_forwarder.healthcheck:main"' in pyproject
+    assert Path(".python-version").read_text().strip() == "3.14"
+    assert Path("uv.lock").exists()
+    assert not Path("requirements-dev.txt").exists()

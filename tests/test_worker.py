@@ -1,8 +1,9 @@
+import inspect
 from datetime import datetime, timedelta, timezone
 import json
 
 from sms_forwarder.queue_store import QueueStore
-from sms_forwarder.worker import DeliveryWorker, RetryableDeliveryError, TerminalDeliveryError
+from sms_forwarder.worker import DeliveryWorker, RetryableDeliveryError, TerminalDeliveryError, main
 
 
 def build_payload(now):
@@ -122,3 +123,7 @@ def test_prune_history_keeps_only_the_newest_files(tmp_path):
     worker.prune_history("sent", keep_latest=2)
 
     assert sorted(path.name for path in sent_dir.glob("*.json")) == ["three.json", "two.json"]
+
+
+def test_main_exposes_a_no_argument_console_entry_point():
+    assert list(inspect.signature(main).parameters) == []

@@ -1,6 +1,7 @@
+import inspect
 from datetime import datetime, timezone
 
-from sms_forwarder.healthcheck import healthcheck
+from sms_forwarder.healthcheck import healthcheck, main
 from sms_forwarder.queue_store import QueueStore
 
 
@@ -45,3 +46,7 @@ def test_healthcheck_fails_when_due_message_is_too_old(tmp_path):
 
     assert status == 1
     assert detail.startswith("oldest due message age exceeded")
+
+
+def test_main_exposes_a_no_argument_console_entry_point():
+    assert list(inspect.signature(main).parameters) == []

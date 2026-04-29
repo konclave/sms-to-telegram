@@ -1,3 +1,4 @@
+import inspect
 import json
 from datetime import datetime, timezone
 
@@ -92,3 +93,7 @@ def test_main_falls_back_to_stdout_when_log_path_cannot_be_opened(tmp_path, monk
     pending_paths = list((queue_root / "pending").glob("*.json"))
     assert len(pending_paths) == 1
     assert captured.out.splitlines() == [f"event=enqueue_success path={pending_paths[0]}"]
+
+
+def test_main_exposes_a_no_argument_console_entry_point():
+    assert list(inspect.signature(main).parameters) == []

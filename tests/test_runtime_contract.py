@@ -1,4 +1,5 @@
 from pathlib import Path
+import tomllib
 
 
 def test_runtime_files_reference_python_forwarder():
@@ -18,15 +19,20 @@ def test_readme_documents_local_quadlet_deploy_tracking():
 
 
 def test_repo_uses_uv_packaging_metadata():
-    pyproject = Path("pyproject.toml").read_text()
+    pyproject = tomllib.loads(Path("pyproject.toml").read_text())
 
-    assert 'requires-python = ">=3.14,<3.15"' in pyproject
-    assert "[project.optional-dependencies]" in pyproject
-    assert 'dev = ["pytest==8.4.1"]' in pyproject
-    assert '[project.scripts]' in pyproject
-    assert 'sms-forwarder-enqueue = "sms_forwarder.enqueue_hook:main"' in pyproject
-    assert 'sms-forwarder-worker = "sms_forwarder.worker:main"' in pyproject
-    assert 'sms-forwarder-healthcheck = "sms_forwarder.healthcheck:main"' in pyproject
+    assert pyproject["build-system"] == {
+        "requires": ["setuptools>=80"],
+        "build-backend": "setuptools.build_meta",
+    }
+    assert pyproject["project"]["requires-python"] == ">=3.14,<3.15"
+    assert pyproject["project"]["optional-dependencies"]["dev"] == ["pytest==8.4.1"]
+    assert pyproject["project"]["scripts"] == {
+        "sms-forwarder-enqueue": "sms_forwarder.enqueue_hook:main",
+        "sms-forwarder-worker": "sms_forwarder.worker:main",
+        "sms-forwarder-healthcheck": "sms_forwarder.healthcheck:main",
+    }
+    assert pyproject["dependency-groups"]["dev"] == ["pytest==8.4.1"]
     assert Path(".python-version").read_text().strip() == "3.14"
     assert Path("uv.lock").exists()
     assert not Path("requirements-dev.txt").exists()

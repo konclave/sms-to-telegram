@@ -19,7 +19,7 @@ def test_enqueue_from_environment_creates_one_file_per_sms(tmp_path, monkeypatch
     )
 
     assert len(created) == 2
-    payloads = [json.loads(path.read_text()) for path in sorted(created)]
+    payloads = [json.loads(path.read_text()) for path in created]
     assert payloads[0]["sender"] == "+49111"
     assert payloads[0]["text"] == "first line\nsecond line"
     assert payloads[1]["sender"] == "+49222"

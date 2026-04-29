@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 import os
 import uuid
@@ -14,16 +14,15 @@ def enqueue_from_environment(store: QueueStore, now: datetime | None = None) -> 
     created = []
 
     for index in range(1, message_count + 1):
-        message_time = now + timedelta(microseconds=index - 1)
         sender = os.environ.get(f"SMS_{index}_NUMBER", "")
         text = os.environ.get(f"SMS_{index}_TEXT", "")
         payload = {
             "id": uuid.uuid4().hex,
-            "received_at": message_time.isoformat(),
+            "received_at": now.isoformat(),
             "sender": sender,
             "text": text,
             "attempts": 0,
-            "next_attempt_at": message_time.isoformat(),
+            "next_attempt_at": now.isoformat(),
             "last_error": None,
             "telegram_chat_id": os.environ["CHAT_ID"],
         }

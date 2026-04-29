@@ -1,18 +1,31 @@
-FROM ubuntu:focal
-ENV PIN 0000
+FROM python:3.14-slim-bookworm
+
+ENV PIN=0000 \
+    LC_ALL=en_US.UTF-8 \
+    LANG=en_US.UTF-8 \
+    UV_PYTHON_DOWNLOADS=never \
+    PATH="/app/.venv/bin:${PATH}"
+
 RUN apt-get update && \
-    apt-get install --no-install-recommends -y gammu-smsd curl gettext locales ca-certificates python3 && \
-		localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8 && \
-		apt-get clean && apt-get autoclean && \
-		rm -rf /var/lib/apt/lists/*
-ENV LC_ALL en_US.UTF-8
-ENV PYTHONPATH=/opt/sms_forwarder
+    apt-get install --no-install-recommends -y \
+        gammu-smsd \
+        gettext \
+        locales \
+        ca-certificates && \
+    localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8 && \
+    python -m pip install --no-cache-dir "setuptools>=80" uv && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY pyproject.toml uv.lock .python-version ./
+COPY sms_forwarder ./sms_forwarder
+RUN uv sync --frozen --no-dev --no-editable --no-build-isolation
+
 COPY gammurc /etc/gammurc
-COPY entrypoint.sh /usr/bin/entrypoint.sh
-COPY enqueue_sms.py send_worker.py check_forwarder_health.py /usr/bin/
-COPY sms_forwarder /opt/sms_forwarder/sms_forwarder
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+
 RUN mkdir -p \
-        /var/log/smsd/ \
+        /var/log/smsd \
         /var/spool/gammu/inbox \
         /var/spool/gammu/outbox \
         /var/spool/gammu/sent \
@@ -21,7 +34,7 @@ RUN mkdir -p \
         /var/spool/sms-forwarder/processing \
         /var/spool/sms-forwarder/sent \
         /var/spool/sms-forwarder/failed && \
-    chmod +x /usr/bin/entrypoint.sh /usr/bin/enqueue_sms.py /usr/bin/send_worker.py /usr/bin/check_forwarder_health.py
+    chmod +x /usr/local/bin/entrypoint.sh
 
-HEALTHCHECK CMD /usr/bin/check_forwarder_health.py
-ENTRYPOINT ["entrypoint.sh"]
+HEALTHCHECK CMD sms-forwarder-healthcheck
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

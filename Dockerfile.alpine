@@ -1,67 +1,76 @@
 FROM alpine:3.23.3 AS builder
 
-# Set version as an argument
 ARG GAMMU_VERSION=1.43.2
 
-# Install dependencies required for building
 RUN apk add --no-cache \
     build-base \
     cmake \
     curl-dev \
     libusb-dev \
-    tar
+    tar \
+    wget
 
-# Download source
 WORKDIR /src
 RUN wget https://github.com/gammu/gammu/releases/download/${GAMMU_VERSION}/Gammu-${GAMMU_VERSION}.tar.gz \
     && tar -xvzf Gammu-${GAMMU_VERSION}.tar.gz
 
-# Build Gammu
 WORKDIR /src/Gammu-${GAMMU_VERSION}
 RUN mkdir build && cd build && \
     cmake \
-    -DCMAKE_INSTALL_PREFIX=/usr \
-    -DCMAKE_INSTALL_LIBDIR=lib \
-    -DBUILD_SHARED_LIBS=ON \
-    -DWITH_MYSQL=OFF \
-    -DWITH_POSTGRES=OFF \
-    -DWITH_DBI=OFF \
-    -DWITH_UNIXODBC=OFF \
-    -DWITH_PYTHON=OFF \
-    .. && \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DBUILD_SHARED_LIBS=ON \
+        -DWITH_MYSQL=OFF \
+        -DWITH_POSTGRES=OFF \
+        -DWITH_DBI=OFF \
+        -DWITH_UNIXODBC=OFF \
+        -DWITH_PYTHON=OFF \
+        .. && \
     make -j$(nproc) && \
     make install
 
-FROM alpine:3.23.3
+FROM python:3.14-alpine3.23
 
-RUN apk update && \
-    apk add libusb \
-      libcurl \
-      tzdata \
-      curl \
-      gettext \
-      ca-certificates \
-      python3
+ENV PIN=0000 \
+    TZ=UTC \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    UV_PYTHON_DOWNLOADS=never \
+    PATH="/app/.venv/bin:${PATH}"
 
-ENV PIN 0000
-ENV LC_ALL en_US.UTF-8
-ENV TZ UTC
-ENV PYTHONPATH=/opt/sms_forwarder
+RUN apk add --no-cache \
+    libusb \
+    libcurl \
+    libgcc \
+    libstdc++ \
+    tzdata \
+    gettext \
+    ca-certificates && \
+    python -m pip install --no-cache-dir "setuptools>=80" uv
 
-# Copy only the binaries and libraries from the builder stage
 COPY --from=builder /usr/bin/gammu* /usr/bin/
 COPY --from=builder /usr/lib/libGammu* /usr/lib/
 COPY --from=builder /usr/lib/libgsmsd* /usr/lib/
 
+WORKDIR /app
+COPY pyproject.toml uv.lock .python-version ./
+COPY sms_forwarder ./sms_forwarder
+RUN uv sync --frozen --no-dev --no-editable --no-build-isolation
+
 COPY gammurc /etc/gammurc
-COPY entrypoint.sh /usr/bin/entrypoint.sh
-COPY enqueue_sms.py send_worker.py check_forwarder_health.py /usr/bin/
-COPY sms_forwarder /opt/sms_forwarder/sms_forwarder
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 
-RUN mkdir /var/log/smsd/ && \
-    mkdir -p /var/spool/gammu/inbox /var/spool/gammu/outbox /var/spool/gammu/sent /var/spool/gammu/error && \
-    mkdir -p /var/spool/sms-forwarder/pending /var/spool/sms-forwarder/processing /var/spool/sms-forwarder/sent /var/spool/sms-forwarder/failed && \
-    chmod +x /usr/bin/entrypoint.sh /usr/bin/enqueue_sms.py /usr/bin/send_worker.py /usr/bin/check_forwarder_health.py
+RUN mkdir -p \
+        /var/log/smsd \
+        /var/spool/gammu/inbox \
+        /var/spool/gammu/outbox \
+        /var/spool/gammu/sent \
+        /var/spool/gammu/error \
+        /var/spool/sms-forwarder/pending \
+        /var/spool/sms-forwarder/processing \
+        /var/spool/sms-forwarder/sent \
+        /var/spool/sms-forwarder/failed && \
+    chmod +x /usr/local/bin/entrypoint.sh
 
-HEALTHCHECK CMD /usr/bin/check_forwarder_health.py
-ENTRYPOINT ["entrypoint.sh"]
+HEALTHCHECK CMD sms-forwarder-healthcheck
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

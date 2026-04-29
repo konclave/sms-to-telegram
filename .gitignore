@@ -1,1 +1,4 @@
 tmux-*.log
+.worktrees/
+.venv/
+.deploy/

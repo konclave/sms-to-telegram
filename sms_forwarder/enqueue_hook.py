@@ -33,7 +33,9 @@ def enqueue_from_environment(store: QueueStore, now: datetime | None = None) -> 
 
 
 def _log_destination():
-    log_path = os.environ.get("ENQUEUE_LOG_PATH", "/proc/1/fd/1")
+    log_path = os.environ.get("ENQUEUE_LOG_PATH")
+    if not log_path:
+        return nullcontext(None)
     try:
         return open(log_path, "a", encoding="utf-8")
     except OSError:
@@ -46,11 +48,9 @@ def main() -> int:
     with _log_destination() as stream:
         for path in created:
             message = f"event=enqueue_success path={path}"
-            try:
+            if stream is None:
                 print(message)
-            except (OSError, ValueError):
-                pass
-            if stream is not None:
+            else:
                 print(message, file=stream)
     return 0
 

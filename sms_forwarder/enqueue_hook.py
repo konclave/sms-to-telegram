@@ -48,9 +48,9 @@ def main() -> int:
     with _log_destination(log_path) as stream:
         for path in created:
             message = f"event=enqueue_success path={path}"
-            if log_path is None:
+            if stream is None:
                 print(message)
-            elif stream is not None:
+            else:
                 print(message, file=stream)
     return 0
 

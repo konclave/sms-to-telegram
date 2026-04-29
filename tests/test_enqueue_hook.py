@@ -56,3 +56,39 @@ def test_main_uses_queue_root_and_logs_each_created_path(tmp_path, monkeypatch):
         f"event=enqueue_success path={pending_paths[0]}",
         f"event=enqueue_success path={pending_paths[1]}",
     ])
+
+
+def test_main_prints_to_stdout_when_log_path_is_unset(tmp_path, monkeypatch, capsys):
+    queue_root = tmp_path / "queue"
+    monkeypatch.setenv("QUEUE_ROOT", str(queue_root))
+    monkeypatch.delenv("ENQUEUE_LOG_PATH", raising=False)
+    monkeypatch.setenv("SMS_MESSAGES", "1")
+    monkeypatch.setenv("SMS_1_NUMBER", "+49111")
+    monkeypatch.setenv("SMS_1_TEXT", "first line")
+    monkeypatch.setenv("CHAT_ID", "987654")
+
+    result = main()
+
+    assert result == 0
+    captured = capsys.readouterr()
+    pending_paths = list((queue_root / "pending").glob("*.json"))
+    assert len(pending_paths) == 1
+    assert captured.out.splitlines() == [f"event=enqueue_success path={pending_paths[0]}"]
+
+
+def test_main_falls_back_to_stdout_when_log_path_cannot_be_opened(tmp_path, monkeypatch, capsys):
+    queue_root = tmp_path / "queue"
+    monkeypatch.setenv("QUEUE_ROOT", str(queue_root))
+    monkeypatch.setenv("ENQUEUE_LOG_PATH", str(tmp_path / "missing" / "enqueue.log"))
+    monkeypatch.setenv("SMS_MESSAGES", "1")
+    monkeypatch.setenv("SMS_1_NUMBER", "+49111")
+    monkeypatch.setenv("SMS_1_TEXT", "first line")
+    monkeypatch.setenv("CHAT_ID", "987654")
+
+    result = main()
+
+    assert result == 0
+    captured = capsys.readouterr()
+    pending_paths = list((queue_root / "pending").glob("*.json"))
+    assert len(pending_paths) == 1
+    assert captured.out.splitlines() == [f"event=enqueue_success path={pending_paths[0]}"]

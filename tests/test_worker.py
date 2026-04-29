@@ -34,6 +34,7 @@ def test_process_due_message_moves_successes_to_sent(tmp_path):
 
     assert processed is True
     assert calls == ["hello"]
+    assert worker.last_event == "delivery_success"
     assert len(list((tmp_path / "sent").glob("*.json"))) == 1
     assert not list((tmp_path / "pending").glob("*.json"))
 
@@ -52,6 +53,7 @@ def test_process_due_message_requeues_retryable_errors(tmp_path):
     processed = worker.process_next_due_message()
 
     assert processed is True
+    assert worker.last_event == "delivery_retry"
     pending_files = list((tmp_path / "pending").glob("*.json"))
     assert len(pending_files) == 1
     payload = json.loads(pending_files[0].read_text())
@@ -74,6 +76,7 @@ def test_process_due_message_moves_terminal_errors_to_failed(tmp_path):
     processed = worker.process_next_due_message()
 
     assert processed is True
+    assert worker.last_event == "delivery_failed"
     failed_files = list((tmp_path / "failed").glob("*.json"))
     assert len(failed_files) == 1
     payload = json.loads(failed_files[0].read_text())
@@ -97,6 +100,7 @@ def test_process_due_message_stops_retrying_after_max_attempts(tmp_path):
     processed = worker.process_next_due_message()
 
     assert processed is True
+    assert worker.last_event == "delivery_failed"
     failed_files = list((tmp_path / "failed").glob("*.json"))
     assert len(failed_files) == 1
     payload = json.loads(failed_files[0].read_text())

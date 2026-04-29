@@ -23,7 +23,7 @@ class TelegramClient:
         body = json.dumps(
             {
                 "chat_id": payload["telegram_chat_id"],
-                "text": payload["text"],
+                "text": f'{payload["sender"]}:\n{payload["text"]}',
             }
         ).encode("utf-8")
         req = request.Request(

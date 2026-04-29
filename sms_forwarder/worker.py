@@ -29,8 +29,12 @@ class DeliveryWorker:
         self.send_message = send_message
         self.now = now or (lambda: datetime.now(timezone.utc))
         self.max_attempts = max_attempts
+        self.last_event: str | None = None
+        self.last_payload: dict | None = None
 
     def process_next_due_message(self) -> bool:
+        self.last_event = None
+        self.last_payload = None
         now = self.now()
         pending_path, payload = self._claim_next_due_message(now)
         if pending_path is None or payload is None:
@@ -45,16 +49,23 @@ class DeliveryWorker:
             payload["last_error"] = str(exc)
             if payload["attempts"] >= self.max_attempts:
                 self._move_payload(processing_path, "failed", payload)
+                self.last_event = "delivery_failed"
             else:
                 payload["next_attempt_at"] = self.next_attempt_at(payload["attempts"]).isoformat()
                 self._move_payload(processing_path, "pending", payload)
+                self.last_event = "delivery_retry"
+            self.last_payload = payload
             return True
         except TerminalDeliveryError as exc:
             payload["last_error"] = str(exc)
             self._move_payload(processing_path, "failed", payload)
+            self.last_event = "delivery_failed"
+            self.last_payload = payload
             return True
 
         self._move_payload(processing_path, "sent", payload)
+        self.last_event = "delivery_success"
+        self.last_payload = payload
         return True
 
     def next_attempt_at(self, attempts: int) -> datetime:
@@ -99,16 +110,16 @@ def main() -> int:
     max_attempts = int(os.environ.get("MAX_ATTEMPTS", "24"))
 
     store = QueueStore(queue_root)
-    client = TelegramClient(bot_token=os.environ["TELEGRAM_BOT_TOKEN"])
+    client = TelegramClient(bot_token=os.environ["BOT_TOKEN"])
     worker = DeliveryWorker(
         store=store,
         send_message=client.send_message,
         max_attempts=max_attempts,
     )
 
-    print(f"event=worker_start queue_root={queue_root} max_attempts={max_attempts}")
+    print(f"event=worker_startup queue_root={queue_root} max_attempts={max_attempts}")
     recovered = store.recover_stale_processing()
-    print(f"event=recover_stale_processing count={len(recovered)}")
+    print(f"event=stale_recovered count={len(recovered)}")
 
     while True:
         processed = worker.process_next_due_message()
@@ -116,13 +127,21 @@ def main() -> int:
         worker.prune_history("failed", keep_failed)
 
         if processed:
-            sent_count = len(list((store.root / "sent").glob("*.json")))
-            failed_count = len(list((store.root / "failed").glob("*.json")))
-            pending_count = len(list((store.root / "pending").glob("*.json")))
-            if failed_count:
-                print(f"event=delivery_state pending={pending_count} sent={sent_count} failed={failed_count}")
-            else:
-                print(f"event=delivery_success pending={pending_count} sent={sent_count}")
+            payload = worker.last_payload or {}
+            if worker.last_event == "delivery_retry":
+                print(
+                    "event=delivery_retry "
+                    f"id={payload.get('id')} attempts={payload.get('attempts')} "
+                    f"next_attempt_at={payload.get('next_attempt_at')}"
+                )
+            elif worker.last_event == "delivery_failed":
+                print(
+                    "event=delivery_failed "
+                    f"id={payload.get('id')} attempts={payload.get('attempts')} "
+                    f"error={payload.get('last_error')}"
+                )
+            elif worker.last_event == "delivery_success":
+                print(f"event=delivery_success id={payload.get('id')}")
             continue
 
         print(f"event=worker_idle sleep_seconds={idle_sleep_seconds}")

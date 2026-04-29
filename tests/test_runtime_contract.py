@@ -2,10 +2,10 @@ from pathlib import Path
 import tomllib
 
 
-def test_runtime_files_reference_python_forwarder():
-    assert "RunOnReceive=/usr/bin/enqueue_sms.py" in Path("gammurc").read_text()
+def test_runtime_files_reference_installed_forwarder_commands():
+    assert "RunOnReceive=sms-forwarder-enqueue" in Path("gammurc").read_text()
     entrypoint = Path("entrypoint.sh").read_text()
-    assert "/usr/bin/send_worker.py &" in entrypoint
+    assert "sms-forwarder-worker &" in entrypoint
     assert "WORKER_PID_FILE=${WORKER_PID_FILE:-/var/run/sms-forwarder-worker.pid}" in entrypoint
     quadlet = Path("sms-to-telegram.container").read_text()
     assert "Image=localhost/sms-to-telegram:latest" in quadlet

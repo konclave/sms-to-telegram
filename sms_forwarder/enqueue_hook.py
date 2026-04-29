@@ -32,8 +32,7 @@ def enqueue_from_environment(store: QueueStore, now: datetime | None = None) -> 
     return created
 
 
-def _log_destination():
-    log_path = os.environ.get("ENQUEUE_LOG_PATH")
+def _log_destination(log_path: str | None):
     if not log_path:
         return nullcontext(None)
     try:
@@ -44,13 +43,14 @@ def _log_destination():
 
 def main() -> int:
     queue_root = os.environ.get("QUEUE_ROOT", "/var/spool/sms-forwarder")
+    log_path = os.environ.get("ENQUEUE_LOG_PATH")
     created = enqueue_from_environment(QueueStore(queue_root))
-    with _log_destination() as stream:
+    with _log_destination(log_path) as stream:
         for path in created:
             message = f"event=enqueue_success path={path}"
-            if stream is None:
+            if log_path is None:
                 print(message)
-            else:
+            elif stream is not None:
                 print(message, file=stream)
     return 0
 

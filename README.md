@@ -8,7 +8,7 @@ A Docker container that forwards SMS messages from a GSM modem to a Telegram cha
 - Supports any GSM modem compatible with gammu
 - Available in two variants: Ubuntu-based and Alpine-based images
 - Configurable PIN code for SIM card
-- Real-time message forwarding
+- File-backed queue with retrying worker delivery
 - Supports multiple messages handling
 
 ## Prerequisites
@@ -28,6 +28,7 @@ A Docker container that forwards SMS messages from a GSM modem to a Telegram cha
 ```bash
 docker run -d \
   --device=/dev/ttyUSB0:/dev/ttyUSB0 \
+  -v /var/lib/sms-to-telegram-queue:/var/spool/sms-forwarder \
   -e DEVICE=/dev/ttyUSB0 \
   -e PIN=0000 \
   -e BOT_TOKEN=your_telegram_bot_token \
@@ -43,6 +44,7 @@ docker run -d \
 | PIN       | SIM card PIN code                    | 0000     |
 | BOT_TOKEN | Telegram Bot API token               | Required |
 | CHAT_ID   | Telegram chat ID to send messages to | Required |
+| QUEUE_ROOT | Queue directory inside the container | /var/spool/sms-forwarder |
 
 ## Docker Images
 
@@ -70,9 +72,16 @@ docker build -f Dockerfile.alpine -t sms-to-telegram:alpine .
 ## How It Works
 
 1. The container uses gammu-smsd to monitor the GSM modem for incoming messages
-2. When a new SMS is received, gammu-smsd triggers the `sms_to_telegram.sh` script
-3. The script formats the message and sends it to Telegram using the Bot API
-4. Messages include the sender's phone number and the message text
+2. When a new SMS is received, gammu-smsd triggers a Python enqueue hook
+3. The hook persists each message into a local queue immediately
+4. A separate Python worker drains the queue, retries transient Telegram failures, and records failed deliveries
+5. Messages include the sender's phone number and the message text
+
+## Queue Operations
+
+- Persist `/var/spool/sms-forwarder` if you want retries to survive container recreation.
+- Inspect `pending/` for backlog, `failed/` for operator action, and `sent/` for recent delivery history.
+- The container healthcheck fails if the worker is missing or due messages are stuck too long.
 
 ## Troubleshooting
 
@@ -81,3 +90,4 @@ docker build -f Dockerfile.alpine -t sms-to-telegram:alpine .
 3. Verify that the SIM card PIN is correct if PIN protection is enabled
 4. Ensure the Telegram bot token is valid and the bot has permission to send messages
 5. Confirm that the chat ID is correct and the bot is a member of the chat
+6. Inspect the queue volume if messages are stuck in `pending/` or `failed/`

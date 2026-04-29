@@ -6,12 +6,16 @@ Description=SMS to Telegam Proxy Container
 Image=docker.io/kutovoys/sms-to-telegram:latest
 EnvironmentFile=/etc/systemd-notify.env
 Environment=DEVICE=/dev/ttyUSB0
+Environment=QUEUE_ROOT=/var/spool/sms-forwarder
+Environment=WORKER_PID_FILE=/var/run/sms-forwarder-worker.pid
+Environment=ENQUEUE_LOG_PATH=/proc/1/fd/1
 # Env vars are set up in the env file (see the path above)
 # Environment=PIN=xxxx
 # Environment=BOT_TOKEN=xxxx:xxxx
 # Environment=CHAT_ID=xxxx
 ContainerName=sms-to-telegram
 AddDevice=/dev/serial/by-id/usb-HUAWEI_Technologies_HUAWEI_Mobile-if00-port0:/dev/ttyUSB0
+Volume=/var/lib/sms-to-telegram-queue:/var/spool/sms-forwarder:Z
 # AddDevice=/dev/ttyUSB2:/dev/ttyUSB0
 
 [Service]

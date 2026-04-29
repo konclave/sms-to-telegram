@@ -40,11 +40,13 @@ RUN apk update && \
       tzdata \
       curl \
       gettext \
-      ca-certificates
+      ca-certificates \
+      python3
 
 ENV PIN 0000
 ENV LC_ALL en_US.UTF-8
 ENV TZ UTC
+ENV PYTHONPATH=/opt/sms_forwarder
 
 # Copy only the binaries and libraries from the builder stage
 COPY --from=builder /usr/bin/gammu* /usr/bin/
@@ -52,13 +54,14 @@ COPY --from=builder /usr/lib/libGammu* /usr/lib/
 COPY --from=builder /usr/lib/libgsmsd* /usr/lib/
 
 COPY gammurc /etc/gammurc
-COPY sms_to_telegram.sh /etc/sms_to_telegram.sh
 COPY entrypoint.sh /usr/bin/entrypoint.sh
+COPY enqueue_sms.py send_worker.py check_forwarder_health.py /usr/bin/
+COPY sms_forwarder /opt/sms_forwarder/sms_forwarder
 
 RUN mkdir /var/log/smsd/ && \
-    mkdir -p /var/spool/gammu/ && \
-    cd /var/spool/gammu/ && \
-    mkdir inbox outbox sent error && \
-    chmod +x /usr/bin/entrypoint.sh /etc/sms_to_telegram.sh
+    mkdir -p /var/spool/gammu/inbox /var/spool/gammu/outbox /var/spool/gammu/sent /var/spool/gammu/error && \
+    mkdir -p /var/spool/sms-forwarder/pending /var/spool/sms-forwarder/processing /var/spool/sms-forwarder/sent /var/spool/sms-forwarder/failed && \
+    chmod +x /usr/bin/entrypoint.sh /usr/bin/enqueue_sms.py /usr/bin/send_worker.py /usr/bin/check_forwarder_health.py
 
+HEALTHCHECK CMD /usr/bin/check_forwarder_health.py
 ENTRYPOINT ["entrypoint.sh"]

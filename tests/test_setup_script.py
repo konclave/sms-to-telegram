@@ -95,7 +95,7 @@ def test_setup_creates_local_state_after_first_build(tmp_path):
     ) in log_text
 
 
-def test_setup_fingerprint_changes_only_when_runtime_inputs_change(tmp_path):
+def test_setup_fingerprint_changes_for_runtime_and_packaging_inputs(tmp_path):
     repo_root = Path.cwd()
     repo = prepare_repo_copy(tmp_path, repo_root)
     fake_bin = tmp_path / "bin"
@@ -153,10 +153,20 @@ def test_setup_fingerprint_changes_only_when_runtime_inputs_change(tmp_path):
     initial = subprocess.run(["bash", "setup.sh", "--print-fingerprint"], cwd=repo, env=env, capture_output=True, text=True, check=True).stdout.strip()
     (repo / "README.md").write_text((repo / "README.md").read_text() + "\nlocal docs change\n")
     after_docs = subprocess.run(["bash", "setup.sh", "--print-fingerprint"], cwd=repo, env=env, capture_output=True, text=True, check=True).stdout.strip()
+    (repo / "pyproject.toml").write_text((repo / "pyproject.toml").read_text() + "\n# packaging change\n")
+    after_packaging = subprocess.run(
+        ["bash", "setup.sh", "--print-fingerprint"],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
     (repo / "entrypoint.sh").write_text((repo / "entrypoint.sh").read_text() + "\n# runtime change\n")
     after_runtime = subprocess.run(["bash", "setup.sh", "--print-fingerprint"], cwd=repo, env=env, capture_output=True, text=True, check=True).stdout.strip()
 
     assert after_docs == initial
+    assert after_packaging != initial
     assert after_runtime != initial
 
 

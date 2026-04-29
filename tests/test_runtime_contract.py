@@ -18,6 +18,11 @@ def test_runtime_files_reference_installed_forwarder_commands():
 
 def test_readme_documents_local_quadlet_deploy_tracking():
     readme = Path("README.md").read_text()
+    assert "uv sync" in readme
+    assert "uv run pytest" in readme
+    assert "sms-forwarder-enqueue" in readme
+    assert "sms-forwarder-worker" in readme
+    assert "Python 3.14" in readme
     assert "localhost/sms-to-telegram:latest" in readme
     assert ".deploy/sms-to-telegram-state.json" in readme
     assert "build skipped: fingerprint unchanged" in readme

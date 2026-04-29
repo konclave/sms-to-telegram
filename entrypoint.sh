@@ -19,7 +19,7 @@ mkdir -p \
 
 export QUEUE_ROOT WORKER_PID_FILE ENQUEUE_LOG_PATH
 
-/usr/bin/send_worker.py &
+sms-forwarder-worker &
 worker_pid=$!
 printf '%s\n' "$worker_pid" > "$WORKER_PID_FILE"
 

@@ -95,7 +95,7 @@ def test_setup_creates_local_state_after_first_build(tmp_path):
     ) in log_text
 
 
-def test_setup_fingerprint_changes_only_when_runtime_inputs_change(tmp_path):
+def test_setup_fingerprint_changes_for_runtime_and_packaging_inputs(tmp_path):
     repo_root = Path.cwd()
     repo = prepare_repo_copy(tmp_path, repo_root)
     fake_bin = tmp_path / "bin"
@@ -150,14 +150,33 @@ def test_setup_fingerprint_changes_only_when_runtime_inputs_change(tmp_path):
         "IMAGE_NAME": "localhost/sms-to-telegram:latest",
     }
 
-    initial = subprocess.run(["bash", "setup.sh", "--print-fingerprint"], cwd=repo, env=env, capture_output=True, text=True, check=True).stdout.strip()
+    def fingerprint() -> str:
+        return subprocess.run(
+            ["bash", "setup.sh", "--print-fingerprint"],
+            cwd=repo,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+
+    initial = fingerprint()
     (repo / "README.md").write_text((repo / "README.md").read_text() + "\nlocal docs change\n")
-    after_docs = subprocess.run(["bash", "setup.sh", "--print-fingerprint"], cwd=repo, env=env, capture_output=True, text=True, check=True).stdout.strip()
+    after_docs = fingerprint()
+    (repo / "pyproject.toml").write_text((repo / "pyproject.toml").read_text() + "\n# packaging change\n")
+    after_pyproject = fingerprint()
+    (repo / "uv.lock").write_text((repo / "uv.lock").read_text() + "\n# lockfile change\n")
+    after_uv_lock = fingerprint()
+    (repo / "Dockerfile.alpine").write_text((repo / "Dockerfile.alpine").read_text() + "\n# alternate image change\n")
+    after_alpine = fingerprint()
     (repo / "entrypoint.sh").write_text((repo / "entrypoint.sh").read_text() + "\n# runtime change\n")
-    after_runtime = subprocess.run(["bash", "setup.sh", "--print-fingerprint"], cwd=repo, env=env, capture_output=True, text=True, check=True).stdout.strip()
+    after_runtime = fingerprint()
 
     assert after_docs == initial
-    assert after_runtime != initial
+    assert after_pyproject != initial
+    assert after_uv_lock != after_pyproject
+    assert after_alpine == after_uv_lock
+    assert after_runtime != after_alpine
 
 
 def test_setup_skips_build_when_image_exists_and_fingerprint_is_unchanged(tmp_path):

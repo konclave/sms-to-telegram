@@ -11,6 +11,9 @@ QUADLET_TARGET="$QUADLET_DIR/sms-to-telegram.container"
 
 IMAGE_INPUTS=(
   Dockerfile
+  pyproject.toml
+  uv.lock
+  .python-version
   entrypoint.sh
   gammurc
   enqueue_sms.py

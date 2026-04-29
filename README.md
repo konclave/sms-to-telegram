@@ -16,10 +16,34 @@ A Docker container that forwards SMS messages from a GSM modem to a Telegram cha
 ## Prerequisites
 
 - Docker installed on your system
+- `uv` installed for local development
+- Python 3.14 for local development and image builds
 - GSM modem (Huawei or compatible)
 - Telegram Bot Token
 - Telegram Chat ID
 - SIM card (with or without PIN)
+
+## Local Development
+
+The supported local workflow uses `uv` with Python 3.14.
+
+1. Install the project environment:
+
+```bash
+uv sync
+```
+
+2. Run the test suite:
+
+```bash
+uv run pytest
+```
+
+`uv sync` installs the package and the runtime entrypoints used by the container image:
+
+- `sms-forwarder-enqueue`
+- `sms-forwarder-worker`
+- `sms-forwarder-healthcheck`
 
 ## Quick Start
 
@@ -83,10 +107,12 @@ docker build -f Dockerfile.alpine -t sms-to-telegram:alpine .
 ## How It Works
 
 1. The container uses gammu-smsd to monitor the GSM modem for incoming messages
-2. When a new SMS is received, gammu-smsd triggers a Python enqueue hook
+2. When a new SMS is received, gammu-smsd triggers the installed `sms-forwarder-enqueue` command
 3. The hook persists each message into a local queue immediately
-4. A separate Python worker drains the queue, retries transient Telegram failures, and records failed deliveries
+4. The installed `sms-forwarder-worker` command drains the queue, retries transient Telegram failures, and records failed deliveries
 5. Messages include the sender's phone number and the message text
+
+The runtime image also uses the installed `sms-forwarder-healthcheck` command for container health reporting instead of invoking loose repository scripts directly.
 
 ## Queue Operations
 
@@ -183,6 +209,8 @@ It:
 4. installs `sms-to-telegram.container` into `/etc/containers/systemd/`
 5. reloads systemd and restarts `sms-to-telegram.service`
 6. records local deploy state in `.deploy/sms-to-telegram-state.json`
+
+Fingerprint inputs include packaging and runtime files such as `pyproject.toml`, `uv.lock`, `.python-version`, `entrypoint.sh`, `gammurc`, and the `sms_forwarder/` package. Documentation-only edits do not trigger a rebuild.
 
 Typical output:
 

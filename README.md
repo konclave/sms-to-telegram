@@ -171,7 +171,33 @@ sudo systemctl status sms-to-telegram.service
 sudo journalctl -u sms-to-telegram.service -f
 ```
 
-The repo’s `setup.sh` is only a local convenience helper. It symlinks `sms-to-telegram.container` into `/etc/containers/systemd/`, reloads systemd, stops the existing service, and starts it again. Adjust the source path in that script before using it on another machine.
+## Local Quadlet Deploy Flow
+
+`setup.sh` is the local deploy entrypoint for the Quadlet service.
+
+It:
+
+1. computes a fingerprint from image-relevant files
+2. checks whether `localhost/sms-to-telegram:latest` already exists
+3. rebuilds only when the image is missing or the fingerprint changed
+4. installs `sms-to-telegram.container` into `/etc/containers/systemd/`
+5. reloads systemd and restarts `sms-to-telegram.service`
+6. records local deploy state in `.deploy/sms-to-telegram-state.json`
+
+Typical output:
+
+- `build skipped: fingerprint unchanged`
+- `build triggered: image missing`
+- `build triggered: source fingerprint changed`
+- `deployed image: sha256:...`
+
+The `.deploy/` directory is local-only and gitignored. It is used to track the last built image ID, source fingerprint, and deploy timestamps for this machine.
+
+The Quadlet unit is expected to reference the stable local image:
+
+```ini
+Image=localhost/sms-to-telegram:latest
+```
 
 The provided `sms-to-telegram.container` is the reusable Quadlet template and reads secrets from `/etc/systemd-notify.env`.
 

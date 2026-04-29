@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+from contextlib import nullcontext
 import os
 import uuid
 
@@ -31,11 +32,21 @@ def enqueue_from_environment(store: QueueStore, now: datetime | None = None) -> 
     return created
 
 
+def _log_destination():
+    log_path = os.environ.get("ENQUEUE_LOG_PATH", "/proc/1/fd/1")
+    try:
+        return open(log_path, "a", encoding="utf-8")
+    except OSError:
+        return nullcontext(None)
+
+
 def main() -> int:
     queue_root = os.environ.get("QUEUE_ROOT", "/var/spool/sms-forwarder")
     created = enqueue_from_environment(QueueStore(queue_root))
-    for path in created:
-        print(f"event=enqueue_success path={path}")
+    with _log_destination() as stream:
+        for path in created:
+            if stream is not None:
+                print(f"event=enqueue_success path={path}", file=stream)
     return 0
 
 

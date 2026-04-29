@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timezone
 
-from sms_forwarder.enqueue_hook import enqueue_from_environment
+from sms_forwarder.enqueue_hook import enqueue_from_environment, main
 from sms_forwarder.queue_store import QueueStore
 
 
@@ -33,3 +33,26 @@ def test_enqueue_from_environment_returns_empty_list_when_no_messages(tmp_path, 
     created = enqueue_from_environment(QueueStore(tmp_path))
 
     assert created == []
+
+
+def test_main_uses_queue_root_and_logs_each_created_path(tmp_path, monkeypatch):
+    queue_root = tmp_path / "queue"
+    log_path = tmp_path / "enqueue.log"
+    monkeypatch.setenv("QUEUE_ROOT", str(queue_root))
+    monkeypatch.setenv("ENQUEUE_LOG_PATH", str(log_path))
+    monkeypatch.setenv("SMS_MESSAGES", "2")
+    monkeypatch.setenv("SMS_1_NUMBER", "+49111")
+    monkeypatch.setenv("SMS_1_TEXT", "first line")
+    monkeypatch.setenv("SMS_2_NUMBER", "+49222")
+    monkeypatch.setenv("SMS_2_TEXT", "second line")
+    monkeypatch.setenv("CHAT_ID", "987654")
+
+    result = main()
+
+    assert result == 0
+    pending_paths = sorted((queue_root / "pending").glob("*.json"))
+    assert len(pending_paths) == 2
+    assert sorted(log_path.read_text().splitlines()) == sorted([
+        f"event=enqueue_success path={pending_paths[0]}",
+        f"event=enqueue_success path={pending_paths[1]}",
+    ])

@@ -28,6 +28,26 @@ def test_readme_documents_local_quadlet_deploy_tracking():
     assert "build skipped: fingerprint unchanged" in readme
 
 
+def test_repo_defines_ghcr_publish_workflow_contract():
+    workflow = Path(".github/workflows/publish-ghcr.yml").read_text()
+
+    assert "v*" in workflow
+    assert "ghcr.io" in workflow
+    assert "Dockerfile.alpine" in workflow
+    assert "packages: write" in workflow
+    assert "docker/login-action" in workflow
+    assert "docker/build-push-action" in workflow
+
+
+def test_readme_documents_ghcr_release_workflow():
+    readme = Path("README.md").read_text()
+
+    assert "ghcr.io/" in readme
+    assert "Dockerfile.alpine" in readme
+    assert "v1.2.3" in readme
+    assert "GitHub Actions" in readme
+
+
 def test_repo_uses_uv_packaging_metadata():
     pyproject = tomllib.loads(Path("pyproject.toml").read_text())
 

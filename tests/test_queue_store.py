@@ -59,28 +59,42 @@ def test_enqueue_writes_message_atomically(tmp_path, monkeypatch):
 def test_enqueue_syncs_file_and_directory_for_durability(tmp_path, monkeypatch):
     store = QueueStore(tmp_path)
     payload = build_payload()
-    fsync_calls: list[int] = []
-    replace_call_count = 0
+    events: list[tuple[str, int | str]] = []
+    directory_fd: int | None = None
     original_fsync = os.fsync
+    original_open = os.open
     original_replace = Path.replace
 
     def fsync_spy(fd: int) -> None:
-        fsync_calls.append(fd)
+        events.append(("fsync", fd))
         original_fsync(fd)
 
+    def open_spy(path, flags: int, mode: int = 0o777) -> int:
+        nonlocal directory_fd
+        fd = original_open(path, flags, mode)
+        if Path(path) == tmp_path / "pending":
+            directory_fd = fd
+            events.append(("open_dir", fd))
+        return fd
+
     def replace_spy(source: Path, target: Path) -> Path:
-        nonlocal replace_call_count
-        replace_call_count += 1
-        assert fsync_calls, "temp file must be fsynced before rename"
+        events.append(("replace", str(target)))
+        assert any(event[0] == "fsync" for event in events), "temp file must be fsynced before rename"
         return original_replace(source, target)
 
     monkeypatch.setattr(os, "fsync", fsync_spy)
+    monkeypatch.setattr(os, "open", open_spy)
     monkeypatch.setattr(Path, "replace", replace_spy)
 
     store.enqueue(payload)
 
-    assert replace_call_count == 1
-    assert len(fsync_calls) >= 2
+    expected_target = str(next((tmp_path / "pending").glob("*.json")))
+    assert directory_fd is not None
+    replace_index = events.index(("replace", expected_target))
+    open_dir_index = events.index(("open_dir", directory_fd))
+    assert ("fsync", directory_fd) in events
+    assert open_dir_index > replace_index
+    assert events[open_dir_index + 1] == ("fsync", directory_fd)
 
 
 def test_recover_stale_processing_moves_items_back_to_pending(tmp_path):

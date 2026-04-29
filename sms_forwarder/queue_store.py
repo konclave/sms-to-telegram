@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
 import json
+import os
+from pathlib import Path
 import uuid
 
 
@@ -18,8 +19,16 @@ class QueueStore:
         file_name = f"{payload['received_at'].replace(':', '-')}-{uuid.uuid4().hex}.json"
         pending_path = self.root / "pending" / file_name
         temp_path = pending_path.with_suffix(".json.tmp")
-        temp_path.write_text(json.dumps(payload, ensure_ascii=False))
+        with temp_path.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False)
+            handle.flush()
+            os.fsync(handle.fileno())
         temp_path.replace(pending_path)
+        directory_fd = os.open(pending_path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
         return pending_path
 
     def recover_stale_processing(self) -> list[Path]:

@@ -11,7 +11,6 @@ QUADLET_TARGET="$QUADLET_DIR/sms-to-telegram.container"
 
 IMAGE_INPUTS=(
   Dockerfile
-  Dockerfile.alpine
   pyproject.toml
   uv.lock
   .python-version

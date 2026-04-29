@@ -45,8 +45,13 @@ def main() -> int:
     created = enqueue_from_environment(QueueStore(queue_root))
     with _log_destination() as stream:
         for path in created:
+            message = f"event=enqueue_success path={path}"
+            try:
+                print(message)
+            except (OSError, ValueError):
+                pass
             if stream is not None:
-                print(f"event=enqueue_success path={path}", file=stream)
+                print(message, file=stream)
     return 0
 
 

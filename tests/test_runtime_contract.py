@@ -28,6 +28,35 @@ def test_readme_documents_local_quadlet_deploy_tracking():
     assert "build skipped: fingerprint unchanged" in readme
 
 
+def test_repo_defines_ghcr_publish_workflow_contract():
+    workflow = Path(".github/workflows/publish-ghcr.yml").read_text()
+
+    assert "v*" in workflow
+    assert "ghcr.io" in workflow
+    assert '${GITHUB_REPOSITORY_OWNER,,}' in workflow
+    assert "Dockerfile.alpine" in workflow
+    assert "packages: write" in workflow
+    assert "docker/setup-buildx-action" in workflow
+    assert "docker/login-action" in workflow
+    assert "docker/build-push-action" in workflow
+    assert "VERSION_PATTERN='^v[0-9]+\\.[0-9]+\\.[0-9]+$'" in workflow
+    assert 'grep -Eq "${VERSION_PATTERN}"' in workflow
+    assert "Expected a semantic version tag like v1.2.3" in workflow
+    assert "${{ env.IMAGE_NAME }}:${{ env.VERSION_TAG }}" in workflow
+    assert "${{ env.IMAGE_NAME }}:${{ env.NORMALIZED_TAG }}" in workflow
+    assert "${{ env.IMAGE_NAME }}:latest" not in workflow
+
+
+def test_readme_documents_ghcr_release_workflow():
+    readme = Path("README.md").read_text()
+
+    assert "GitHub Actions" in readme
+    assert "ghcr.io/<owner>/sms-to-telegram" in readme
+    assert "Dockerfile.alpine" in readme
+    assert "v1.2.3" in readme
+    assert "version tags" in readme
+
+
 def test_repo_uses_uv_packaging_metadata():
     pyproject = tomllib.loads(Path("pyproject.toml").read_text())
 

@@ -6,7 +6,7 @@ A Docker container that forwards SMS messages from a GSM modem to a Telegram cha
 
 - Forwards incoming SMS messages to a specified Telegram chat
 - Supports any GSM modem compatible with gammu
-- Available in two variants: Ubuntu-based and Alpine-based images
+- Local source builds support both Debian-based and Alpine-based container variants
 - Configurable PIN code for SIM card
 - File-backed queue with retrying worker delivery
 - At-least-once delivery semantics for transient Telegram failures
@@ -59,7 +59,7 @@ docker run -d \
   -e PIN=0000 \
   -e BOT_TOKEN=your_telegram_bot_token \
   -e CHAT_ID=your_telegram_chat_id \
-  kutovoys/sms-to-telegram
+  ghcr.io/<owner>/sms-to-telegram:v1.2.3
 ```
 
 The queue volume is strongly recommended. Without it, pending retries are lost when the container is recreated.
@@ -83,26 +83,27 @@ The queue volume is strongly recommended. Without it, pending retries are lost w
 
 ## Docker Images
 
-The project provides two Docker image variants:
-
-- `kutovoys/sms-to-telegram:latest` - Ubuntu-based image
-- `kutovoys/sms-to-telegram:alpine` - Alpine-based lightweight image
-
-Choose the Alpine variant if you prefer a smaller image size and reduced resource usage.
+The repository can be built locally from either `Dockerfile` or `Dockerfile.alpine`.
 
 ## Building from Source
 
-To build the Ubuntu-based image:
+To build the Debian-based image locally:
 
 ```bash
 docker build -t sms-to-telegram .
 ```
 
-To build the Alpine-based image:
+To build the Alpine-based image locally:
 
 ```bash
 docker build -f Dockerfile.alpine -t sms-to-telegram:alpine .
 ```
+
+## GHCR Publishing
+
+GitHub Actions publishes only the Alpine image, and it builds that release from `Dockerfile.alpine`.
+
+Publishing is triggered by pushed version tags like `v1.2.3`. Each release is pushed to `ghcr.io/<owner>/sms-to-telegram` with both the original `v1.2.3` tag and the normalized `1.2.3` tag.
 
 ## How It Works
 

@@ -115,8 +115,7 @@ def test_build_backend_derives_a_development_version_from_git_history(tmp_path):
 
     version_line = next(line for line in metadata.splitlines() if line.startswith("Version: "))
     resolved = version_line.removeprefix("Version: ")
-    assert re.match(r"^\d+\.\d+\.\d+", resolved)
-    assert ".dev" in resolved
+    assert re.fullmatch(r"\d+\.\d+\.\d+\.dev\d+(?:\+[a-z0-9.]+)?", resolved)
 
 
 def test_container_files_target_python_314_and_uv_installation():

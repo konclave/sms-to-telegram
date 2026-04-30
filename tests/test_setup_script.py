@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
+from uuid import uuid4
 
 
 def write_fake_bin(directory: Path, name: str, body: str) -> None:
@@ -28,6 +29,20 @@ def prepare_repo_copy(tmp_path: Path, repo_root: Path) -> Path:
     target = tmp_path / "repo"
     subprocess.run(["cp", "-R", str(repo_root), str(target)], check=True)
     return target
+
+
+def unique_version_tag(repo: Path) -> str:
+    while True:
+        tag = f"v0.1.0-test-{uuid4().hex[:8]}"
+        listed = subprocess.run(
+            ["git", "tag", "--list", tag],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        if not listed:
+            return tag
 
 
 def test_setup_creates_local_state_after_first_build(tmp_path):
@@ -169,7 +184,7 @@ def test_setup_fingerprint_changes_for_runtime_and_packaging_inputs(tmp_path):
     after_alpine = fingerprint()
     (repo / "entrypoint.sh").write_text((repo / "entrypoint.sh").read_text() + "\n# runtime change\n")
     after_runtime = fingerprint()
-    subprocess.run(["git", "tag", "v0.1.0"], cwd=repo, check=True)
+    subprocess.run(["git", "tag", unique_version_tag(repo)], cwd=repo, check=True)
     after_tag = fingerprint()
 
     assert after_pyproject != initial
@@ -199,7 +214,7 @@ def test_setup_fingerprint_changes_when_git_version_state_changes(tmp_path):
         ).stdout.strip()
 
     initial = fingerprint()
-    subprocess.run(["git", "tag", "v0.1.0"], cwd=repo, check=True)
+    subprocess.run(["git", "tag", unique_version_tag(repo)], cwd=repo, check=True)
     after_tag = fingerprint()
     subprocess.run(
         [

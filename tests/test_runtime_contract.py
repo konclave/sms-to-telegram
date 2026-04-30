@@ -39,8 +39,12 @@ def test_repo_defines_ghcr_publish_workflow_contract():
     assert "docker/setup-buildx-action" in workflow
     assert "docker/login-action" in workflow
     assert "docker/build-push-action" in workflow
+    assert "VERSION_PATTERN='^v[0-9]+\\.[0-9]+\\.[0-9]+$'" in workflow
+    assert 'grep -Eq "${VERSION_PATTERN}"' in workflow
+    assert "Expected a semantic version tag like v1.2.3" in workflow
     assert "${{ env.IMAGE_NAME }}:${{ env.VERSION_TAG }}" in workflow
     assert "${{ env.IMAGE_NAME }}:${{ env.NORMALIZED_TAG }}" in workflow
+    assert "${{ env.IMAGE_NAME }}:latest" not in workflow
 
 
 def test_readme_documents_ghcr_release_workflow():

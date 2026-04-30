@@ -1,8 +1,11 @@
+import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tomllib
 import uuid
+import zipfile
 
 import pytest
 
@@ -57,24 +60,63 @@ def test_readme_documents_ghcr_release_workflow():
     assert "version tags" in readme
 
 
-def test_repo_uses_uv_packaging_metadata():
+def test_repo_uses_git_dynamic_versioning_metadata():
     pyproject = tomllib.loads(Path("pyproject.toml").read_text())
 
     assert pyproject["build-system"] == {
-        "requires": ["setuptools>=80"],
+        "requires": ["setuptools>=80", "setuptools-scm[simple]>=9.2"],
         "build-backend": "setuptools.build_meta",
     }
+    assert pyproject["project"]["dynamic"] == ["version"]
+    assert "version" not in pyproject["project"]
     assert pyproject["project"]["requires-python"] == ">=3.14,<3.15"
-    assert pyproject["project"]["optional-dependencies"]["dev"] == ["pytest==8.4.1"]
-    assert pyproject["project"]["scripts"] == {
-        "sms-forwarder-enqueue": "sms_forwarder.enqueue_hook:main",
-        "sms-forwarder-worker": "sms_forwarder.worker:main",
-        "sms-forwarder-healthcheck": "sms_forwarder.healthcheck:main",
-    }
-    assert pyproject["dependency-groups"]["dev"] == ["pytest==8.4.1"]
-    assert Path(".python-version").read_text().strip() == "3.14"
     assert Path("uv.lock").exists()
-    assert not Path("requirements-dev.txt").exists()
+
+
+def test_build_backend_derives_a_development_version_from_git_history(tmp_path):
+    repo = tmp_path / "repo"
+    shutil.copytree(
+        Path.cwd(),
+        repo,
+        ignore=shutil.ignore_patterns(".venv", ".pytest_cache", ".uv-cache", "__pycache__"),
+    )
+    subprocess.run(["git", "tag", "v0.1.0"], cwd=repo, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test User",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "after tag",
+        ],
+        cwd=repo,
+        check=True,
+    )
+
+    dist = tmp_path / "dist"
+    env = os.environ | {"UV_CACHE_DIR": str(repo / ".uv-cache")}
+    subprocess.run(
+        ["uv", "build", "--wheel", "--out-dir", str(dist)],
+        cwd=repo,
+        env=env,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+
+    wheel = next(dist.glob("sms_to_telegram-*.whl"))
+    with zipfile.ZipFile(wheel) as archive:
+        metadata_name = next(name for name in archive.namelist() if name.endswith("METADATA"))
+        metadata = archive.read(metadata_name).decode()
+
+    version_line = next(line for line in metadata.splitlines() if line.startswith("Version: "))
+    resolved = version_line.removeprefix("Version: ")
+    assert re.match(r"^\d+\.\d+\.\d+", resolved)
+    assert ".dev" in resolved
 
 
 def test_container_files_target_python_314_and_uv_installation():

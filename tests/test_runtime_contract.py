@@ -62,6 +62,7 @@ def test_readme_documents_ghcr_release_workflow():
 
 def test_repo_uses_git_dynamic_versioning_metadata():
     pyproject = tomllib.loads(Path("pyproject.toml").read_text())
+    lockfile = Path("uv.lock").read_text()
 
     assert pyproject["build-system"] == {
         "requires": ["setuptools>=80", "setuptools-scm[simple]>=9.2"],
@@ -70,17 +71,37 @@ def test_repo_uses_git_dynamic_versioning_metadata():
     assert pyproject["project"]["dynamic"] == ["version"]
     assert "version" not in pyproject["project"]
     assert pyproject["project"]["requires-python"] == ">=3.14,<3.15"
-    assert Path("uv.lock").exists()
+    assert 'name = "sms-to-telegram"' in lockfile
+    assert "source = { editable = \".\" }" in lockfile
+    assert 'version = "0.1.0"' not in lockfile
 
 
 def test_build_backend_derives_a_development_version_from_git_history(tmp_path):
     repo = tmp_path / "repo"
+    version_base = "9.8.7"
+    expected_dev_base = "9.8.8"
     shutil.copytree(
         Path.cwd(),
         repo,
-        ignore=shutil.ignore_patterns(".venv", ".pytest_cache", ".uv-cache", "__pycache__"),
+        ignore=shutil.ignore_patterns(".git", ".venv", ".pytest_cache", ".uv-cache", "__pycache__"),
     )
-    subprocess.run(["git", "tag", "v0.1.0"], cwd=repo, check=True)
+    subprocess.run(["git", "init"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test User",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "-m",
+            "initial snapshot",
+        ],
+        cwd=repo,
+        check=True,
+    )
+    subprocess.run(["git", "tag", f"v{version_base}"], cwd=repo, check=True)
     subprocess.run(
         [
             "git",
@@ -115,7 +136,7 @@ def test_build_backend_derives_a_development_version_from_git_history(tmp_path):
 
     version_line = next(line for line in metadata.splitlines() if line.startswith("Version: "))
     resolved = version_line.removeprefix("Version: ")
-    assert re.fullmatch(r"\d+\.\d+\.\d+\.dev\d+(?:\+[a-z0-9.]+)?", resolved)
+    assert re.fullmatch(rf"{re.escape(expected_dev_base)}\.dev\d+(?:\+[a-z0-9.]+)?", resolved)
 
 
 def test_container_files_target_python_314_and_uv_installation():

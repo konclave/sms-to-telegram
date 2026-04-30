@@ -40,6 +40,16 @@ def test_repo_defines_ghcr_publish_workflow_contract():
     assert "docker/build-push-action" in workflow
 
 
+@pytest.mark.xfail(reason="Task 3 will document the GHCR release flow in README.md", strict=False)
+def test_readme_documents_ghcr_release_workflow():
+    readme = Path("README.md").read_text()
+
+    assert "ghcr.io/" in readme
+    assert "Dockerfile.alpine" in readme
+    assert "v1.2.3" in readme
+    assert "GitHub Actions" in readme
+
+
 def test_repo_uses_uv_packaging_metadata():
     pyproject = tomllib.loads(Path("pyproject.toml").read_text())
 

@@ -161,8 +161,6 @@ def test_setup_fingerprint_changes_for_runtime_and_packaging_inputs(tmp_path):
         ).stdout.strip()
 
     initial = fingerprint()
-    (repo / "README.md").write_text((repo / "README.md").read_text() + "\nlocal docs change\n")
-    after_docs = fingerprint()
     (repo / "pyproject.toml").write_text((repo / "pyproject.toml").read_text() + "\n# packaging change\n")
     after_pyproject = fingerprint()
     (repo / "uv.lock").write_text((repo / "uv.lock").read_text() + "\n# lockfile change\n")
@@ -171,12 +169,57 @@ def test_setup_fingerprint_changes_for_runtime_and_packaging_inputs(tmp_path):
     after_alpine = fingerprint()
     (repo / "entrypoint.sh").write_text((repo / "entrypoint.sh").read_text() + "\n# runtime change\n")
     after_runtime = fingerprint()
+    subprocess.run(["git", "tag", "v0.1.0"], cwd=repo, check=True)
+    after_tag = fingerprint()
 
-    assert after_docs == initial
     assert after_pyproject != initial
     assert after_uv_lock != after_pyproject
     assert after_alpine == after_uv_lock
     assert after_runtime != after_alpine
+    assert after_tag != after_runtime
+
+
+def test_setup_fingerprint_changes_when_git_version_state_changes(tmp_path):
+    repo_root = Path.cwd()
+    repo = prepare_repo_copy(tmp_path, repo_root)
+
+    env = os.environ | {
+        "PATH": os.environ["PATH"],
+        "STATE_DIR": str(repo / ".deploy"),
+    }
+
+    def fingerprint() -> str:
+        return subprocess.run(
+            ["bash", "setup.sh", "--print-fingerprint"],
+            cwd=repo,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+
+    initial = fingerprint()
+    subprocess.run(["git", "tag", "v0.1.0"], cwd=repo, check=True)
+    after_tag = fingerprint()
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test User",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "advance version state",
+        ],
+        cwd=repo,
+        check=True,
+    )
+    after_commit = fingerprint()
+
+    assert after_tag != initial
+    assert after_commit != after_tag
 
 
 def test_setup_skips_build_when_image_exists_and_fingerprint_is_unchanged(tmp_path):

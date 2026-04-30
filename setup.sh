@@ -45,6 +45,26 @@ PY
   fi
 }
 
+emit_git_version_state() {
+  (
+    cd "$REPO_ROOT"
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+      printf '%s\0' "git-unavailable"
+      return
+    fi
+
+    printf '%s\0' ".git/HEAD"
+    git rev-parse HEAD
+
+    printf '%s\0' ".git/describe"
+    if git describe --dirty --tags --long --always --match 'v[0-9]*' >/dev/null 2>&1; then
+      git describe --dirty --tags --long --always --match 'v[0-9]*'
+    else
+      git rev-parse --short HEAD
+    fi
+  )
+}
+
 compute_source_fingerprint() {
   (
     cd "$REPO_ROOT"
@@ -57,6 +77,7 @@ compute_source_fingerprint() {
         printf '%s\0' "$path"
         cat "$path"
       done
+      emit_git_version_state
     } | python3 -c 'import hashlib, sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'
   )
 }

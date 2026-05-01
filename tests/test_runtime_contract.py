@@ -28,9 +28,14 @@ def test_readme_documents_local_quadlet_deploy_tracking():
     assert "Python 3.14" in readme
     assert "localhost/sms-to-telegram:latest" in readme
     assert "build skipped: fingerprint unchanged" in readme
-    assert "Git tags" in readme
-    assert "v1.2.3" in readme
-    assert "development version" in readme
+    assert "## Git Tags and Versioning" in readme
+    assert "git tag v1.2.3" in readme
+    assert "git push origin v1.2.3" in readme
+    assert "Non-tagged commits build as a development version derived from the most recent tag" in readme
+    assert "Container builds need Git metadata during the install step" in readme
+    assert "the final runtime image does not include `.git`" in readme
+    assert "The local deploy fingerprint also tracks Git version state" in readme
+    assert "version-affecting Git changes trigger a rebuild" in readme
     assert ".deploy/sms-to-telegram-state.json" in readme
 
 

@@ -105,7 +105,7 @@ GitHub Actions publishes only the Alpine image, and it builds that release from 
 
 Publishing is triggered by pushed version tags like `v1.2.3`. Each release is pushed to `ghcr.io/<owner>/sms-to-telegram` with both the original `v1.2.3` tag and the normalized `1.2.3` tag.
 
-## Git tags And Versioning
+## Git Tags and Versioning
 
 Release tags are created manually in `vX.Y.Z` form:
 

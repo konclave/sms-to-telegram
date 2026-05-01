@@ -105,6 +105,19 @@ GitHub Actions publishes only the Alpine image, and it builds that release from 
 
 Publishing is triggered by pushed version tags like `v1.2.3`. Each release is pushed to `ghcr.io/<owner>/sms-to-telegram` with both the original `v1.2.3` tag and the normalized `1.2.3` tag.
 
+## Git tags And Versioning
+
+Release tags are created manually in `vX.Y.Z` form:
+
+```bash
+git tag v1.2.3
+git push origin v1.2.3
+```
+
+Tagged releases build with that exact version. Non-tagged commits build as a development version derived from the most recent tag, so commits after `v1.2.3` resolve to a newer development version instead of reusing the release number.
+
+Container builds need Git metadata during the install step so the package version can be derived correctly. The Dockerfiles mount `.git` only for that build step; the final runtime image does not include `.git`.
+
 ## How It Works
 
 1. The container uses gammu-smsd to monitor the GSM modem for incoming messages
@@ -212,6 +225,8 @@ It:
 6. records local deploy state in `.deploy/sms-to-telegram-state.json`
 
 Fingerprint inputs include packaging and runtime files such as `pyproject.toml`, `uv.lock`, `.python-version`, `entrypoint.sh`, `gammurc`, and the `sms_forwarder/` package. Documentation-only edits do not trigger a rebuild.
+
+The local deploy fingerprint also tracks Git version state, so new Git tags and other version-affecting Git changes trigger a rebuild even when the application files themselves are unchanged.
 
 Typical output:
 

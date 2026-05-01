@@ -27,8 +27,11 @@ def test_readme_documents_local_quadlet_deploy_tracking():
     assert "sms-forwarder-worker" in readme
     assert "Python 3.14" in readme
     assert "localhost/sms-to-telegram:latest" in readme
-    assert ".deploy/sms-to-telegram-state.json" in readme
     assert "build skipped: fingerprint unchanged" in readme
+    assert "Git tags" in readme
+    assert "v1.2.3" in readme
+    assert "development version" in readme
+    assert ".deploy/sms-to-telegram-state.json" in readme
 
 
 def test_repo_defines_ghcr_publish_workflow_contract():

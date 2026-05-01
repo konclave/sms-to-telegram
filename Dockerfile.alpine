@@ -43,6 +43,7 @@ COPY pyproject.toml uv.lock .python-version ./
 COPY sms_forwarder ./sms_forwarder
 RUN --mount=type=bind,source=.git,target=/app/.git \
     uv sync --frozen --no-dev --no-install-project && \
+    uv pip install --python /app/.venv/bin/python "setuptools==82.0.1" "setuptools-scm[simple]==10.0.5" && \
     uv pip install --python /app/.venv/bin/python --no-deps --no-build-isolation .
 
 FROM python:3.14-alpine3.23

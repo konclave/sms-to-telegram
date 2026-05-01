@@ -159,8 +159,12 @@ def test_container_files_resolve_version_with_temporary_git_metadata():
     assert "--mount=type=bind,source=.git,target=/app/.git" in alpine
     assert "uv sync --frozen --no-dev --no-install-project" in primary
     assert "uv sync --frozen --no-dev --no-install-project" in alpine
+    assert 'uv pip install --python /app/.venv/bin/python "setuptools==82.0.1" "setuptools-scm[simple]==10.0.5"' in primary
+    assert 'uv pip install --python /app/.venv/bin/python "setuptools==82.0.1" "setuptools-scm[simple]==10.0.5"' in alpine
     assert "uv pip install --python /app/.venv/bin/python --no-deps --no-build-isolation ." in primary
     assert "uv pip install --python /app/.venv/bin/python --no-deps --no-build-isolation ." in alpine
+    assert primary.count("python -m pip install --no-cache-dir uv") == 1
+    assert alpine.count("python -m pip install --no-cache-dir uv") == 1
 
 
 def _container_engine() -> str | None:

@@ -33,7 +33,7 @@ def prepare_repo_copy(tmp_path: Path, repo_root: Path) -> Path:
 
 def unique_version_tag(repo: Path) -> str:
     while True:
-        tag = f"v0.1.0-test-{uuid4().hex[:8]}"
+        tag = f"v9.8.{int(uuid4().hex[:6], 16)}"
         listed = subprocess.run(
             ["git", "tag", "--list", tag],
             cwd=repo,

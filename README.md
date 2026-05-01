@@ -224,9 +224,9 @@ It:
 5. reloads systemd and restarts `sms-to-telegram.service`
 6. records local deploy state in `.deploy/sms-to-telegram-state.json`
 
-Fingerprint inputs include packaging and runtime files such as `pyproject.toml`, `uv.lock`, `.python-version`, `entrypoint.sh`, `gammurc`, and the `sms_forwarder/` package. Documentation-only edits do not trigger a rebuild.
+Fingerprint inputs include packaging and runtime files such as `pyproject.toml`, `uv.lock`, `.python-version`, `entrypoint.sh`, `gammurc`, and the `sms_forwarder/` package.
 
-The local deploy fingerprint also tracks Git version state, so new Git tags and other version-affecting Git changes trigger a rebuild even when the application files themselves are unchanged.
+The local deploy fingerprint also tracks Git version state, so new commits, tags, dirty working trees, and other version-affecting Git changes can trigger a rebuild even when the tracked application files themselves are unchanged.
 
 Typical output:
 

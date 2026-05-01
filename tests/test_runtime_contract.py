@@ -35,7 +35,7 @@ def test_readme_documents_local_quadlet_deploy_tracking():
     assert "Container builds need Git metadata during the install step" in readme
     assert "the final runtime image does not include `.git`" in readme
     assert "The local deploy fingerprint also tracks Git version state" in readme
-    assert "version-affecting Git changes trigger a rebuild" in readme
+    assert "version-affecting Git changes can trigger a rebuild" in readme
     assert ".deploy/sms-to-telegram-state.json" in readme
 
 

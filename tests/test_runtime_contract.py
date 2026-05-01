@@ -151,6 +151,18 @@ def test_container_files_target_python_314_and_uv_installation():
     assert "sms-forwarder-healthcheck" in alpine
 
 
+def test_container_files_resolve_version_with_temporary_git_metadata():
+    primary = Path("Dockerfile").read_text()
+    alpine = Path("Dockerfile.alpine").read_text()
+
+    assert "--mount=type=bind,source=.git,target=/app/.git" in primary
+    assert "--mount=type=bind,source=.git,target=/app/.git" in alpine
+    assert "uv sync --frozen --no-dev --no-install-project" in primary
+    assert "uv sync --frozen --no-dev --no-install-project" in alpine
+    assert "uv pip install --python /app/.venv/bin/python --no-deps --no-build-isolation ." in primary
+    assert "uv pip install --python /app/.venv/bin/python --no-deps --no-build-isolation ." in alpine
+
+
 def _container_engine() -> str | None:
     for candidate in ("podman", "docker"):
         engine = shutil.which(candidate)
@@ -209,7 +221,9 @@ def test_container_images_expose_python_uv_and_packaged_console_scripts(
                 "uv --version && "
                 "command -v sms-forwarder-enqueue && "
                 "command -v sms-forwarder-worker && "
-                "command -v sms-forwarder-healthcheck"
+                "command -v sms-forwarder-healthcheck && "
+                "python3 -c \"from importlib.metadata import version; print(version('sms-to-telegram'))\" && "
+                "! command -v git"
             ),
         )
     finally:
@@ -221,3 +235,4 @@ def test_container_images_expose_python_uv_and_packaged_console_scripts(
     assert lines[2].endswith("sms-forwarder-enqueue"), result.stdout
     assert lines[3].endswith("sms-forwarder-worker"), result.stdout
     assert lines[4].endswith("sms-forwarder-healthcheck"), result.stdout
+    assert re.fullmatch(r"\d+\.\d+\.\d+(?:\.dev\d+(?:\+[a-z0-9.]+)?)?", lines[5]), result.stdout

@@ -1,3 +1,21 @@
+# syntax=docker/dockerfile:1.7
+FROM python:3.14-slim-bookworm AS app-builder
+
+ENV UV_PYTHON_DOWNLOADS=never \
+    PATH="/app/.venv/bin:${PATH}"
+
+RUN apt-get update && \
+    apt-get install --no-install-recommends -y git ca-certificates && \
+    python -m pip install --no-cache-dir "setuptools>=80" uv && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY pyproject.toml uv.lock .python-version ./
+COPY sms_forwarder ./sms_forwarder
+RUN --mount=type=bind,source=.git,target=/app/.git \
+    uv sync --frozen --no-dev --no-install-project && \
+    uv pip install --python /app/.venv/bin/python --no-deps --no-build-isolation .
+
 FROM python:3.14-slim-bookworm
 
 ENV PIN=0000 \
@@ -13,13 +31,10 @@ RUN apt-get update && \
         locales \
         ca-certificates && \
     localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8 && \
-    python -m pip install --no-cache-dir "setuptools>=80" uv && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY pyproject.toml uv.lock .python-version ./
-COPY sms_forwarder ./sms_forwarder
-RUN uv sync --frozen --no-dev --no-editable --no-build-isolation
+COPY --from=app-builder /app/.venv /app/.venv
 
 COPY gammurc /etc/gammurc
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh

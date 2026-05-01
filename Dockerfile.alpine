@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 FROM alpine:3.23.3 AS builder
 
 ARG GAMMU_VERSION=1.43.2
@@ -29,6 +30,21 @@ RUN mkdir build && cd build && \
     make -j$(nproc) && \
     make install
 
+FROM python:3.14-alpine3.23 AS app-builder
+
+ENV UV_PYTHON_DOWNLOADS=never \
+    PATH="/app/.venv/bin:${PATH}"
+
+RUN apk add --no-cache git ca-certificates && \
+    python -m pip install --no-cache-dir "setuptools>=80" uv
+
+WORKDIR /app
+COPY pyproject.toml uv.lock .python-version ./
+COPY sms_forwarder ./sms_forwarder
+RUN --mount=type=bind,source=.git,target=/app/.git \
+    uv sync --frozen --no-dev --no-install-project && \
+    uv pip install --python /app/.venv/bin/python --no-deps --no-build-isolation .
+
 FROM python:3.14-alpine3.23
 
 ENV PIN=0000 \
@@ -46,16 +62,14 @@ RUN apk add --no-cache \
     tzdata \
     gettext \
     ca-certificates && \
-    python -m pip install --no-cache-dir "setuptools>=80" uv
+    python -m pip install --no-cache-dir uv
 
 COPY --from=builder /usr/bin/gammu* /usr/bin/
 COPY --from=builder /usr/lib/libGammu* /usr/lib/
 COPY --from=builder /usr/lib/libgsmsd* /usr/lib/
 
 WORKDIR /app
-COPY pyproject.toml uv.lock .python-version ./
-COPY sms_forwarder ./sms_forwarder
-RUN uv sync --frozen --no-dev --no-editable --no-build-isolation
+COPY --from=app-builder /app/.venv /app/.venv
 
 COPY gammurc /etc/gammurc
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh

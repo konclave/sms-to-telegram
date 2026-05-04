@@ -114,8 +114,14 @@ Path(sys.argv[1]).write_text(json.dumps(state, indent=2) + "\n")
 PY
 }
 
+QUEUE_HOST_DIR="${QUEUE_HOST_DIR:-/var/lib/sms-to-telegram-queue}"
+
 install_quadlet_unit() {
   sudo -- install -D -m 0644 "$QUADLET_SOURCE" "$QUADLET_TARGET"
+}
+
+create_host_dirs() {
+  sudo -- mkdir -p "$QUEUE_HOST_DIR"
 }
 
 restart_service() {
@@ -161,6 +167,7 @@ main() {
   fi
 
   image_id="$(inspect_image_id)"
+  create_host_dirs
   install_quadlet_unit
   restart_service
   deployed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"

@@ -55,7 +55,7 @@ def test_repo_defines_ghcr_publish_workflow_contract():
     assert "Expected a semantic version tag like v1.2.3" in workflow
     assert "${{ env.IMAGE_NAME }}:${{ env.VERSION_TAG }}" in workflow
     assert "${{ env.IMAGE_NAME }}:${{ env.NORMALIZED_TAG }}" in workflow
-    assert "${{ env.IMAGE_NAME }}:latest" not in workflow
+    assert "${{ env.IMAGE_NAME }}:latest" in workflow
 
 
 def test_readme_documents_ghcr_release_workflow():

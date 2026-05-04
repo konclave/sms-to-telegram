@@ -4,7 +4,7 @@ Description=SMS to Telegam Proxy Container
 
 [Container]
 ContainerName=sms-to-telegram
-Image=localhost/sms-to-telegram:latest
+Image=ghcr.io/konclave/sms-to-telegram:latest
 EnvironmentFile=/etc/systemd-notify.env
 Environment=DEVICE=/dev/ttyUSB0
 Environment=QUEUE_ROOT=/var/spool/sms-forwarder

@@ -2,3 +2,5 @@ tmux-*.log
 .worktrees/
 .venv/
 .deploy/
+__pycache__/
+*.egg-info/

@@ -218,17 +218,33 @@ sudo journalctl -u sms-to-telegram.service -f
 It:
 
 1. computes a fingerprint from image-relevant files
-2. checks whether `localhost/sms-to-telegram:latest` already exists
-3. rebuilds only when the image is missing or the fingerprint changed
-4. installs `sms-to-telegram.container` into `/etc/containers/systemd/`
-5. reloads systemd and restarts `sms-to-telegram.service`
-6. records local deploy state in `.deploy/sms-to-telegram-state.json`
+2. for a `localhost/` image: checks whether it exists and rebuilds only when missing or the fingerprint changed; for a remote image such as `ghcr.io/...`, the build step is skipped entirely
+3. installs `sms-to-telegram.container` into `/etc/containers/systemd/`
+4. reloads systemd and restarts `sms-to-telegram.service`
+5. records local deploy state in `.deploy/sms-to-telegram-state.json`
 
 Fingerprint inputs include packaging and runtime files such as `pyproject.toml`, `uv.lock`, `.python-version`, `entrypoint.sh`, `gammurc`, and the `sms_forwarder/` package.
 
 The local deploy fingerprint also tracks Git version state, so new commits, tags, dirty working trees, and other version-affecting Git changes can trigger a rebuild even when the tracked application files themselves are unchanged.
 
-Typical output:
+The provided `sms-to-telegram.container` uses the GHCR image published by GitHub Actions:
+
+```ini
+Image=ghcr.io/konclave/sms-to-telegram:latest
+```
+
+To build and deploy a local image instead, override `IMAGE_NAME` before running `setup.sh`:
+
+```bash
+IMAGE_NAME=localhost/sms-to-telegram:latest bash setup.sh
+```
+
+Typical output when deploying a remote image:
+
+- `build skipped: remote image ghcr.io/...`
+- `deployed image: sha256:...`
+
+Typical output when deploying a local image (`localhost/sms-to-telegram:latest`):
 
 - `build skipped: fingerprint unchanged`
 - `build triggered: image missing`
@@ -236,12 +252,6 @@ Typical output:
 - `deployed image: sha256:...`
 
 The `.deploy/` directory is local-only and gitignored. It is used to track the last built image ID, source fingerprint, and deploy timestamps for this machine.
-
-The Quadlet unit is expected to reference the stable local image:
-
-```ini
-Image=localhost/sms-to-telegram:latest
-```
 
 The provided `sms-to-telegram.container` is the reusable Quadlet template and reads secrets from `/etc/systemd-notify.env`.
 

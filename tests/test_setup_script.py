@@ -292,6 +292,43 @@ def test_setup_skips_build_when_image_exists_and_fingerprint_is_unchanged(tmp_pa
     assert updated_state["last_built_at"] == "2026-04-29T18:00:00+00:00"
 
 
+def test_setup_skips_build_for_remote_image(tmp_path):
+    repo_root = Path.cwd()
+    repo = prepare_repo_copy(tmp_path, repo_root)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    log = tmp_path / "calls.log"
+
+    write_fake_bin(
+        fake_bin,
+        "podman",
+        "#!/bin/sh\n"
+        "echo \"podman:$@\" >> \"$CALLS_LOG\"\n"
+        "if [ \"$1\" = image ] && [ \"$2\" = inspect ]; then echo 'sha256:remote-image'; exit 0; fi\n"
+        "exit 0\n",
+    )
+    write_fake_bin(fake_bin, "sudo", "#!/bin/sh\nshift\nexec \"$@\"\n")
+    write_fake_bin(fake_bin, "systemctl", "#!/bin/sh\nexit 0\n")
+    write_fake_bin(fake_bin, "install", install_stub_body())
+
+    env = os.environ | {
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "CALLS_LOG": str(log),
+        "QUADLET_DIR": str(tmp_path / "quadlet"),
+        "STATE_DIR": str(repo / ".deploy"),
+        "IMAGE_NAME": "ghcr.io/konclave/sms-to-telegram:latest",
+    }
+
+    result = subprocess.run(["bash", str(repo / "setup.sh")], cwd=tmp_path, env=env, capture_output=True, text=True)
+
+    assert result.returncode == 0
+    assert "build skipped: remote image ghcr.io/konclave/sms-to-telegram:latest" in result.stdout
+    assert "podman:build" not in log.read_text()
+    state = json.loads((repo / ".deploy" / "sms-to-telegram-state.json").read_text())
+    assert state["image"] == "ghcr.io/konclave/sms-to-telegram:latest"
+    assert state["image_id"] == "sha256:remote-image"
+
+
 def test_setup_rebuilds_when_runtime_input_changes(tmp_path):
     repo_root = Path.cwd()
     repo = prepare_repo_copy(tmp_path, repo_root)

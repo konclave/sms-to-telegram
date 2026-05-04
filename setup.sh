@@ -4,7 +4,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 STATE_DIR="${STATE_DIR:-$REPO_ROOT/.deploy}"
 STATE_FILE="$STATE_DIR/sms-to-telegram-state.json"
-IMAGE_NAME="${IMAGE_NAME:-localhost/sms-to-telegram:latest}"
+IMAGE_NAME="${IMAGE_NAME:-ghcr.io/konclave/sms-to-telegram:latest}"
 QUADLET_SOURCE="${QUADLET_SOURCE:-$REPO_ROOT/sms-to-telegram.container}"
 QUADLET_DIR="${QUADLET_DIR:-/etc/containers/systemd}"
 QUADLET_TARGET="$QUADLET_DIR/sms-to-telegram.container"
@@ -87,7 +87,11 @@ image_exists() {
 }
 
 inspect_image_id() {
-  podman image inspect "$IMAGE_NAME" --format '{{.Id}}'
+  podman image inspect "$IMAGE_NAME" --format '{{.Id}}' 2>/dev/null || echo ""
+}
+
+is_local_image() {
+  [[ "$IMAGE_NAME" == localhost/* ]]
 }
 
 write_state_file() {
@@ -131,23 +135,28 @@ main() {
   previous_built_at="$(load_previous_built_at)"
   built_at=""
 
-  if ! image_exists; then
-    reason="image missing"
-  elif [ "$fingerprint" != "$previous_fingerprint" ]; then
-    reason="source fingerprint changed"
-  else
-    reason=""
-  fi
+  if is_local_image; then
+    if ! image_exists; then
+      reason="image missing"
+    elif [ "$fingerprint" != "$previous_fingerprint" ]; then
+      reason="source fingerprint changed"
+    else
+      reason=""
+    fi
 
-  if [ -n "$reason" ]; then
-    echo "build triggered: $reason"
-    (
-      cd "$REPO_ROOT"
-      podman build -t "$IMAGE_NAME" .
-    )
-    built_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    if [ -n "$reason" ]; then
+      echo "build triggered: $reason"
+      (
+        cd "$REPO_ROOT"
+        podman build -t "$IMAGE_NAME" .
+      )
+      built_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    else
+      echo "build skipped: fingerprint unchanged"
+      built_at="$previous_built_at"
+    fi
   else
-    echo "build skipped: fingerprint unchanged"
+    echo "build skipped: remote image $IMAGE_NAME"
     built_at="$previous_built_at"
   fi
 

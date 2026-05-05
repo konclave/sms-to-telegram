@@ -26,10 +26,15 @@ printf '%s\n' "$worker_pid" > "$WORKER_PID_FILE"
 gammu-smsd -c /etc/gammurc -p /var/run/gammu-smsd.pid &
 gammu_pid=$!
 
-while kill -0 "$worker_pid" 2>/dev/null && kill -0 "$gammu_pid" 2>/dev/null; do
+sms-forwarder-modem-monitor &
+monitor_pid=$!
+
+while kill -0 "$worker_pid" 2>/dev/null \
+      && kill -0 "$gammu_pid" 2>/dev/null \
+      && kill -0 "$monitor_pid" 2>/dev/null; do
   sleep 1
 done
 
-kill "$worker_pid" "$gammu_pid" 2>/dev/null || true
-wait "$worker_pid" "$gammu_pid" 2>/dev/null || true
+kill "$worker_pid" "$gammu_pid" "$monitor_pid" 2>/dev/null || true
+wait "$worker_pid" "$gammu_pid" "$monitor_pid" 2>/dev/null || true
 exit 1

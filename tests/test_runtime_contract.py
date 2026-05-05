@@ -14,6 +14,7 @@ def test_runtime_files_reference_installed_forwarder_commands():
     assert "RunOnReceive=sms-forwarder-enqueue" in Path("gammurc").read_text()
     entrypoint = Path("entrypoint.sh").read_text()
     assert "sms-forwarder-worker &" in entrypoint
+    assert "sms-forwarder-modem-monitor &" in entrypoint
     assert "WORKER_PID_FILE=${WORKER_PID_FILE:-/var/run/sms-forwarder-worker.pid}" in entrypoint
     quadlet = Path("sms-to-telegram.container").read_text()
     assert "Image=ghcr.io/konclave/sms-to-telegram:latest" in quadlet
@@ -234,6 +235,7 @@ def test_container_images_expose_python_uv_and_packaged_console_scripts(
                 "command -v sms-forwarder-enqueue && "
                 "command -v sms-forwarder-worker && "
                 "command -v sms-forwarder-healthcheck && "
+                "command -v sms-forwarder-modem-monitor && "
                 "python3 -c \"from importlib.metadata import version; print(version('sms-to-telegram'))\" && "
                 "! command -v git"
             ),
@@ -247,4 +249,5 @@ def test_container_images_expose_python_uv_and_packaged_console_scripts(
     assert lines[2].endswith("sms-forwarder-enqueue"), result.stdout
     assert lines[3].endswith("sms-forwarder-worker"), result.stdout
     assert lines[4].endswith("sms-forwarder-healthcheck"), result.stdout
-    assert re.fullmatch(r"\d+\.\d+\.\d+(?:\.dev\d+(?:\+[a-z0-9.]+)?)?", lines[5]), result.stdout
+    assert lines[5].endswith("sms-forwarder-modem-monitor"), result.stdout
+    assert re.fullmatch(r"\d+\.\d+\.\d+(?:\.dev\d+(?:\+[a-z0-9.]+)?)?", lines[6]), result.stdout

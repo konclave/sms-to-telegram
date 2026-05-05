@@ -11,6 +11,7 @@ A Docker container that forwards SMS messages from a GSM modem to a Telegram cha
 - File-backed queue with retrying worker delivery
 - At-least-once delivery semantics for transient Telegram failures
 - Built-in healthcheck for stuck queues and missing worker process
+- Modem status monitoring with Telegram alerts for connection loss and low signal
 - Supports multiple messages handling
 
 ## Prerequisites
@@ -44,6 +45,7 @@ uv run pytest
 - `sms-forwarder-enqueue`
 - `sms-forwarder-worker`
 - `sms-forwarder-healthcheck`
+- `sms-forwarder-modem-monitor`
 
 ## Quick Start
 
@@ -80,6 +82,9 @@ The queue volume is strongly recommended. Without it, pending retries are lost w
 | KEEP_FAILED | Number of failed message files to retain | `1000` |
 | WORKER_IDLE_SLEEP_SECONDS | Worker sleep interval when no due messages exist | `5` |
 | QUEUE_HEALTH_MAX_AGE_SECONDS | Healthcheck threshold for oldest due pending item | `300` |
+| GAMMU_CONFIG | Path to gammu config used by the modem monitor | `/etc/gammurc` |
+| SIGNAL_WARN_THRESHOLD | Signal strength % below which the modem monitor sends a low-signal alert | `20` |
+| MONITOR_INTERVAL_SECONDS | How often the modem monitor polls `gammu-smsd-monitor` | `60` |
 
 ## Docker Images
 
@@ -127,6 +132,8 @@ Container builds need Git metadata during the install step so the package versio
 5. Messages include the sender's phone number and the message text
 
 The runtime image also uses the installed `sms-forwarder-healthcheck` command for container health reporting instead of invoking loose repository scripts directly.
+
+The `sms-forwarder-modem-monitor` command runs alongside the worker and gammu-smsd. It periodically polls `gammu-smsd-monitor` and sends a Telegram message when the modem loses network registration or signal drops below the configured threshold, and a follow-up message when conditions recover.
 
 ## Queue Operations
 
@@ -255,6 +262,31 @@ The `.deploy/` directory is local-only and gitignored. It is used to track the l
 
 The provided `sms-to-telegram.container` is the reusable Quadlet template and reads secrets from `/etc/systemd-notify.env`.
 
+## Modem Monitoring
+
+The container runs `sms-forwarder-modem-monitor` as a background process. It polls `gammu-smsd-monitor` on a configurable interval and sends Telegram alerts when modem health changes.
+
+**Alerts sent:**
+
+| Condition | Message |
+| --------- | ------- |
+| Network registration lost | `Modem: network connection lost (state: searching)` |
+| Network registration restored | `Modem: network connection restored (state: home)` |
+| Signal below threshold | `Modem: signal low (12% — below threshold 20%)` |
+| Signal recovered | `Modem: signal recovered (25%)` |
+| `gammu-smsd-monitor` failing | `Modem: monitor tool failing — exit_code=1 ...` |
+| `gammu-smsd-monitor` recovered | `Modem: monitor tool recovered` |
+
+Alerts fire only on state transitions — if the modem stays disconnected across multiple poll cycles, only one alert is sent. A recovery message is sent when the condition clears.
+
+**Log events** emitted to stdout:
+
+- `event=monitor_startup` — logged once on process start with active config values
+- `event=monitor_poll` — logged every cycle with current signal %, network state, and alert flags
+- `event=monitor_error` — logged when `gammu-smsd-monitor` fails
+
+If `gammu-smsd-monitor` is not installed or consistently fails, the monitor sends one alert and backs off — it does not flood Telegram.
+
 ## Troubleshooting
 
 1. Make sure your GSM modem is properly connected and recognized by the system
@@ -263,5 +295,5 @@ The provided `sms-to-telegram.container` is the reusable Quadlet template and re
 4. Ensure the Telegram bot token is valid and the bot has permission to send messages
 5. Confirm that the chat ID is correct and the bot is a member of the chat
 6. Inspect the queue volume if messages are stuck in `pending/` or `failed/`
-7. Check container logs for `event=worker_startup`, `event=delivery_retry`, `event=delivery_failed`, and `event=delivery_success`
+7. Check container logs for `event=worker_startup`, `event=delivery_retry`, `event=delivery_failed`, and `event=delivery_success`; modem monitor events are `event=monitor_startup`, `event=monitor_poll`, and `event=monitor_error`
 8. If messages stay in `processing/` after a crash, restart the container so the worker can recover them back into `pending/`

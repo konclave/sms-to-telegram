@@ -16,6 +16,7 @@ dev = ["pytest==8.4.1"]
 sms-forwarder-enqueue = "sms_forwarder.enqueue_hook:main"
 sms-forwarder-worker = "sms_forwarder.worker:main"
 sms-forwarder-healthcheck = "sms_forwarder.healthcheck:main"
+sms-forwarder-modem-monitor = "sms_forwarder.modem_monitor:main"
 
 [dependency-groups]
 dev = ["pytest==8.4.1"]

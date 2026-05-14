@@ -28,6 +28,27 @@ def test_enqueue_from_environment_creates_one_file_per_sms(tmp_path, monkeypatch
     assert all(payload["telegram_chat_id"] == "987654" for payload in payloads)
 
 
+def test_enqueue_joins_multipart_sms_from_same_sender(tmp_path, monkeypatch):
+    monkeypatch.setenv("SMS_MESSAGES", "3")
+    monkeypatch.setenv("SMS_1_NUMBER", "+49111")
+    monkeypatch.setenv("SMS_1_TEXT", "This is a long message, ")
+    monkeypatch.setenv("SMS_2_NUMBER", "+49111")
+    monkeypatch.setenv("SMS_2_TEXT", "split across multiple ")
+    monkeypatch.setenv("SMS_3_NUMBER", "+49111")
+    monkeypatch.setenv("SMS_3_TEXT", "parts.")
+    monkeypatch.setenv("CHAT_ID", "987654")
+
+    created = enqueue_from_environment(
+        QueueStore(tmp_path),
+        now=datetime(2026, 4, 29, 12, 30, tzinfo=timezone.utc),
+    )
+
+    assert len(created) == 1
+    payload = json.loads(created[0].read_text())
+    assert payload["sender"] == "+49111"
+    assert payload["text"] == "This is a long message, split across multiple parts."
+
+
 def test_enqueue_from_environment_returns_empty_list_when_no_messages(tmp_path, monkeypatch):
     monkeypatch.setenv("SMS_MESSAGES", "0")
 

@@ -14,14 +14,18 @@ def enqueue_from_environment(store: QueueStore, now: datetime | None = None) -> 
     message_count = int(os.environ.get("SMS_MESSAGES", "0"))
     created = []
 
+    parts: dict[str, list[str]] = {}
     for index in range(1, message_count + 1):
         sender = os.environ.get(f"SMS_{index}_NUMBER", "")
         text = os.environ.get(f"SMS_{index}_TEXT", "")
+        parts.setdefault(sender, []).append(text)
+
+    for sender, texts in parts.items():
         payload = {
             "id": uuid.uuid4().hex,
             "received_at": now.isoformat(),
             "sender": sender,
-            "text": text,
+            "text": "".join(texts),
             "attempts": 0,
             "next_attempt_at": now.isoformat(),
             "last_error": None,

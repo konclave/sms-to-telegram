@@ -12,6 +12,8 @@ UDEV_RULE_SOURCE="${UDEV_RULE_SOURCE:-$REPO_ROOT/99-sms-modem-reattach.rules}"
 UDEV_RULE_DIR="${UDEV_RULE_DIR:-/etc/udev/rules.d}"
 REATTACH_UNIT_SOURCE="${REATTACH_UNIT_SOURCE:-$REPO_ROOT/sms-modem-reattach.service}"
 SYSTEMD_UNIT_DIR="${SYSTEMD_UNIT_DIR:-/etc/systemd/system}"
+CHECK_SERVICE_SOURCE="${CHECK_SERVICE_SOURCE:-$REPO_ROOT/sms-modem-check.service}"
+CHECK_TIMER_SOURCE="${CHECK_TIMER_SOURCE:-$REPO_ROOT/sms-modem-check.timer}"
 
 IMAGE_INPUTS=(
   Dockerfile
@@ -137,6 +139,21 @@ install_modem_reattach() {
   sudo -- udevadm control --reload-rules
 }
 
+# The checker runs from the repo checkout; only the units are installed, with
+# ExecStart rewritten to this checkout's path.
+install_modem_check() {
+  local rendered
+  rendered="$(mktemp)"
+  trap 'rm -f "$rendered"' EXIT
+  sed "s|__REPO_ROOT__|$REPO_ROOT|g" "$CHECK_SERVICE_SOURCE" > "$rendered"
+  sudo -- install -D -m 0644 "$rendered" "$SYSTEMD_UNIT_DIR/sms-modem-check.service"
+  rm -f "$rendered"
+  trap - EXIT
+  sudo -- install -D -m 0644 "$CHECK_TIMER_SOURCE" "$SYSTEMD_UNIT_DIR/sms-modem-check.timer"
+  sudo -- systemctl daemon-reload
+  sudo -- systemctl enable --now sms-modem-check.timer
+}
+
 restart_service() {
   sudo -- systemctl daemon-reload
   sudo -- systemctl restart sms-to-telegram.service
@@ -184,6 +201,7 @@ main() {
   create_host_dirs
   install_quadlet_unit
   install_modem_reattach
+  install_modem_check
   restart_service
   deployed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   write_state_file "$fingerprint" "$image_id" "${built_at:-$deployed_at}" "$deployed_at"

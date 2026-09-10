@@ -1,5 +1,5 @@
 [Unit]
-Description=SMS to Telegam Proxy Container
+Description=SMS to Telegram Proxy Container
 OnFailure=quadlet-notify@%n.service
 # A hung modem must not permanently stop the service. Disable systemd's start
 # rate limit so restarts continue indefinitely; the backoff below keeps the

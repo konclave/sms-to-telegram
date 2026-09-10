@@ -633,7 +633,7 @@ import urllib.request
 CREDENTIALS_PATH = "/etc/systemd-notify.env"
 
 
-def read_credentials(path: str = CREDENTIALS_PATH) -> tuple:
+def read_credentials(path: str = CREDENTIALS_PATH) -> tuple:  # (str|None, str|None)
     token = None
     chat = None
     try:
@@ -797,8 +797,8 @@ def main(argv=None, *, transport=None, sender=None) -> int:
         return 0
 
     state = load_state(args.state)
+    was_alerting = state["alert_active"]
     alerts = evaluate(state, status.sms_capable, alert_after=args.alert_after)
-    save_state(args.state, state)
 
     print(
         "srv_domain=%s sms_capable=%s failures=%s alert_active=%s"
@@ -809,10 +809,17 @@ def main(argv=None, *, transport=None, sender=None) -> int:
     if alerts:
         token, chat = read_credentials(args.credentials)
         if not token or not chat:
+            # Roll the latch back before persisting: recording an alert we
+            # never sent would suppress it forever, leaving a real outage
+            # silent. The failure counter still advances.
+            state["alert_active"] = was_alerting
+            save_state(args.state, state)
             print("alert suppressed: credentials unavailable")
             return 0
         for text in alerts:
             send_alert(token, chat, text, sender=sender)
+
+    save_state(args.state, state)
     return 0
 
 

@@ -96,6 +96,24 @@ def test_run_monitor_returns_status_on_success():
     assert status.signal_percent == 34
 
 
+def test_run_monitor_bounds_the_monitor_to_a_single_loop():
+    """gammu-smsd-monitor loops until interrupted unless given --loops.
+
+    Without a loop bound every invocation runs until the 30s timeout kills it,
+    so run_monitor never returns a status and the modem is never actually
+    monitored.
+    """
+    proc = MagicMock()
+    proc.returncode = 0
+    proc.stdout = _FULL_OUTPUT
+    with patch("sms_forwarder.modem_monitor.subprocess.run", return_value=proc) as run:
+        run_monitor("/etc/gammurc")
+
+    argv = run.call_args.args[0]
+    assert "-n" in argv, f"invocation is unbounded and will hit the timeout: {argv}"
+    assert argv[argv.index("-n") + 1] == "1"
+
+
 def test_run_monitor_returns_error_on_nonzero_exit():
     proc = MagicMock()
     proc.returncode = 1

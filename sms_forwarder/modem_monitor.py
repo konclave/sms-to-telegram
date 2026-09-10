@@ -45,7 +45,7 @@ def parse_monitor_output(text: str) -> ModemStatus:
 def run_monitor(gammu_config: str) -> tuple[ModemStatus | None, str | None]:
     try:
         result = subprocess.run(
-            ["gammu-smsd-monitor", "-c", gammu_config],
+            ["gammu-smsd-monitor", "-c", gammu_config, "-n", "1"],
             capture_output=True,
             text=True,
             timeout=30,

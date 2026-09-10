@@ -243,7 +243,9 @@ A README troubleshooting section covering:
    service to this roaming SIM, the handle will not help and the answer lies
    with the carrier. The tool reports honestly on timeout rather than retrying.
 2. **`^SYSINFO` is Huawei-specific.** Replacing the modem with another vendor
-   would require a different query. `AT+CREG?` is the standards-based fallback
-   and is already captured by the parser tests as a secondary signal.
+   would require a different query. `AT+CREG?` is the standards-based
+   equivalent and would be the fallback, but it is deliberately **not**
+   implemented here — there is one modem, and a second code path with no
+   hardware to exercise it would be untested speculation.
 3. **Python version split.** Mitigated by the dual test run above, but it
    remains a trap for future edits to `host/`.

@@ -53,6 +53,7 @@ ENV PIN=0000 \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     UV_PYTHON_DOWNLOADS=never \
+    PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:${PATH}"
 
 RUN apk add --no-cache \

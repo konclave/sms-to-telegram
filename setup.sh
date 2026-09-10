@@ -162,7 +162,8 @@ main() {
       built_at="$previous_built_at"
     fi
   else
-    echo "build skipped: remote image $IMAGE_NAME"
+    echo "pulling remote image $IMAGE_NAME"
+    sudo -- podman pull "$IMAGE_NAME"
     built_at="$previous_built_at"
   fi
 

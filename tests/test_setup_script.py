@@ -317,13 +317,17 @@ def test_setup_skips_build_for_remote_image(tmp_path):
         "QUADLET_DIR": str(tmp_path / "quadlet"),
         "STATE_DIR": str(repo / ".deploy"),
         "IMAGE_NAME": "ghcr.io/konclave/sms-to-telegram:latest",
+        "QUEUE_HOST_DIR": str(tmp_path / "queue"),
     }
 
     result = subprocess.run(["bash", str(repo / "setup.sh")], cwd=tmp_path, env=env, capture_output=True, text=True)
 
     assert result.returncode == 0
-    assert "build skipped: remote image ghcr.io/konclave/sms-to-telegram:latest" in result.stdout
-    assert "podman:build" not in log.read_text()
+    assert "pulling remote image ghcr.io/konclave/sms-to-telegram:latest" in result.stdout
+
+    calls = log.read_text()
+    assert "podman:pull ghcr.io/konclave/sms-to-telegram:latest" in calls
+    assert "podman:build" not in calls
     state = json.loads((repo / ".deploy" / "sms-to-telegram-state.json").read_text())
     assert state["image"] == "ghcr.io/konclave/sms-to-telegram:latest"
     assert state["image_id"] == "sha256:remote-image"

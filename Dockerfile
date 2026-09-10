@@ -23,6 +23,7 @@ ENV PIN=0000 \
     LC_ALL=en_US.UTF-8 \
     LANG=en_US.UTF-8 \
     UV_PYTHON_DOWNLOADS=never \
+    PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:${PATH}"
 
 RUN apt-get update && \

@@ -189,6 +189,72 @@ def test_main_is_silent_while_sms_service_is_healthy(tmp_path):
     assert sent == []
 
 
+def test_main_does_not_alert_when_sysinfo_is_unparseable(tmp_path, capsys):
+    """A reply with no parseable ^SYSINFO is a checker fault, not a modem fault."""
+    port = tmp_path / "port"
+    port.write_text("")
+    sent = []
+    creds = tmp_path / "creds"
+    creds.write_text("BOT_TOKEN=t\nCHAT_ID=c\n")
+    state = tmp_path / "s.json"
+
+    rc = sms_modem_check.main(
+        ["--port", str(port), "--state", str(state), "--credentials", str(creds)],
+        transport=lambda commands: "garbage\nOK\n",
+        sender=lambda url, data: sent.append((url, data)),
+    )
+
+    assert rc == 0
+    assert sent == []
+    assert not state.exists()
+    assert "query failed" in capsys.readouterr().out
+
+
+def test_main_retries_alert_once_credentials_become_available(tmp_path, capsys):
+    """Finding 1 fix: an alert that could not be sent for want of credentials
+    must not be latched as delivered -- it must be re-attempted once
+    credentials are available, and the persisted state/log must agree."""
+    port = tmp_path / "port"
+    port.write_text("")
+    sent = []
+    state = str(tmp_path / "state.json")
+    missing_creds = tmp_path / "missing-creds"
+    real_creds = tmp_path / "creds"
+    real_creds.write_text("BOT_TOKEN=t\nCHAT_ID=c\n")
+
+    def fake_transport(commands):
+        return "^SYSINFO:2,2,1,3,1,0,3\nOK\n"
+
+    # Two consecutive failures cross the alert_after=2 threshold, but
+    # credentials are unavailable at the moment the alert would fire.
+    for _ in range(2):
+        rc = sms_modem_check.main(
+            ["--port", str(port), "--state", state, "--credentials", str(missing_creds)],
+            transport=fake_transport,
+            sender=lambda url, data: sent.append((url, data)),
+        )
+        assert rc == 0
+
+    assert sent == []
+    out = capsys.readouterr().out
+    assert "alert suppressed: credentials unavailable" in out
+    assert "alert_active=False" in out
+    persisted = json.loads(open(state).read())
+    assert persisted["alert_active"] is False
+
+    # A later run with credentials available must still send the alert.
+    rc = sms_modem_check.main(
+        ["--port", str(port), "--state", state, "--credentials", str(real_creds)],
+        transport=fake_transport,
+        sender=lambda url, data: sent.append((url, data)),
+    )
+    assert rc == 0
+    assert len(sent) == 1
+    assert b"packet-switched" in sent[0][1]
+    persisted = json.loads(open(state).read())
+    assert persisted["alert_active"] is True
+
+
 def test_main_does_not_alert_when_the_query_fails(tmp_path, capsys):
     """A checker fault is not a modem fault. Never alert about ourselves."""
     port = tmp_path / "port"

@@ -1,0 +1,11 @@
+[Unit]
+Description=Reattach the SMS forwarder to a re-enumerated modem
+Documentation=https://github.com/konclave/sms-to-telegram
+
+[Service]
+Type=oneshot
+# Let enumeration settle: the modem often bounces several times in a row, and
+# a oneshot that is already running coalesces further triggers instead of
+# restarting the forwarder once per bounce.
+ExecStartPre=/usr/bin/sleep 5
+ExecStart=/usr/bin/systemctl restart sms-to-telegram.service

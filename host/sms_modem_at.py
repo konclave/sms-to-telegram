@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """AT-command access to the modem's diagnostic port.
 
 Runs on the HOST, not in the container, and must stay Python 3.12 compatible.
@@ -58,18 +57,22 @@ def open_port(path: str) -> int:
     modem. The checker opens this port every few minutes.
     """
     fd = os.open(path, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
-    attrs = termios.tcgetattr(fd)
-    iflag, oflag, cflag, lflag, ispeed, ospeed, cc = attrs
+    try:
+        attrs = termios.tcgetattr(fd)
+        iflag, oflag, cflag, lflag, ispeed, ospeed, cc = attrs
 
-    # Raw mode: no echo, no canonical processing, no signal characters.
-    iflag = 0
-    oflag = 0
-    lflag = 0
-    cflag |= termios.CREAD | termios.CLOCAL
-    cflag &= ~termios.HUPCL
+        # Raw mode: no echo, no canonical processing, no signal characters.
+        iflag = 0
+        oflag = 0
+        lflag = 0
+        cflag |= termios.CREAD | termios.CLOCAL
+        cflag &= ~termios.HUPCL
 
-    # ispeed/ospeed are passed through untouched on purpose.
-    termios.tcsetattr(fd, termios.TCSANOW, [iflag, oflag, cflag, lflag, ispeed, ospeed, cc])
+        # ispeed/ospeed are passed through untouched on purpose.
+        termios.tcsetattr(fd, termios.TCSANOW, [iflag, oflag, cflag, lflag, ispeed, ospeed, cc])
+    except Exception:
+        os.close(fd)
+        raise
     return fd
 
 

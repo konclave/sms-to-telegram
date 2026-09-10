@@ -61,15 +61,46 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # The alert is read on a phone, so it carries the real command, not a
 # placeholder the reader has to resolve.
-_ALERT_LOST = (
-    "Modem: no SMS service — registered on the packet-switched domain only "
-    "(srv_domain=2). Data works; SMS cannot arrive.\n"
-    "Fix: cd %s && sudo ./host/sms_modem_reregister.py" % _REPO_ROOT
-)
 _ALERT_RESTORED = "Modem: SMS service restored (circuit-switched domain registered)."
 
 
-def evaluate(state: dict, sms_capable: bool, *, alert_after: int = 2) -> list[str]:
+def _alert_lost_text(srv_domain: int) -> str:
+    """Build the "no SMS service" alert, naming the domain actually observed.
+
+    srv_domain=2 (packet-switched only) is exactly the case the re-register
+    handle exists to fix: data works, SMS does not. srv_domain=0 (no service
+    at all) is a different problem -- there is no network to re-register to,
+    so running the handle would just drop the modem for 2.5 minutes and time
+    out. Every other non-capable domain (chiefly 4, stuck scanning) gets a
+    factual, generic message: the handle may still help, but nothing here
+    claims data works when it hasn't been observed to.
+    """
+    remedy = "cd %s && sudo ./host/sms_modem_reregister.py" % _REPO_ROOT
+
+    if srv_domain == 0:
+        return (
+            "Modem: no SMS service — no service at all (srv_domain=0). "
+            "This does not look like a registration-domain problem the "
+            "re-register handle can fix; check the antenna, SIM, and "
+            "carrier signal first.\n"
+            "If those check out: %s" % remedy
+        )
+    if srv_domain == 2:
+        return (
+            "Modem: no SMS service — registered on the packet-switched "
+            "domain only (srv_domain=2). Data works; SMS cannot arrive.\n"
+            "Fix: %s" % remedy
+        )
+    return (
+        "Modem: no SMS service — not registered for circuit-switched "
+        "service (srv_domain=%s).\n"
+        "Fix: %s" % (srv_domain, remedy)
+    )
+
+
+def evaluate(
+    state: dict, sms_capable: bool, srv_domain: int, *, alert_after: int = 2
+) -> list[str]:
     """Update `state` for one check and return the alerts to send.
 
     Requiring consecutive failures avoids alerting on a modem that is merely
@@ -80,7 +111,7 @@ def evaluate(state: dict, sms_capable: bool, *, alert_after: int = 2) -> list[st
     if not sms_capable:
         state["consecutive_failures"] += 1
         if state["consecutive_failures"] >= alert_after and not state["alert_active"]:
-            alerts.append(_ALERT_LOST)
+            alerts.append(_alert_lost_text(srv_domain))
             state["alert_active"] = True
         return alerts
 
@@ -150,7 +181,7 @@ def main(argv=None, *, transport=None, sender=None) -> int:
 
     state = load_state(args.state)
     was_alerting = state["alert_active"]
-    alerts = evaluate(state, status.sms_capable, alert_after=args.alert_after)
+    alerts = evaluate(state, status.sms_capable, status.srv_domain, alert_after=args.alert_after)
 
     if alerts:
         token, chat = read_credentials(args.credentials)
@@ -167,8 +198,23 @@ def main(argv=None, *, transport=None, sender=None) -> int:
             )
             print("alert suppressed: credentials unavailable")
             return 0
-        for text in alerts:
-            send_alert(token, chat, text, sender=sender)
+        try:
+            for text in alerts:
+                send_alert(token, chat, text, sender=sender)
+        except OSError as exc:
+            # Same reasoning as the missing-credentials path: nothing was
+            # delivered, so nothing must be latched as delivered. Returning
+            # non-zero (rather than swallowing this like a checker fault)
+            # lets OnFailure= alert on the delivery outage itself.
+            state["alert_active"] = was_alerting
+            save_state(args.state, state)
+            print(
+                "srv_domain=%s sms_capable=%s failures=%s alert_active=%s"
+                % (status.srv_domain, status.sms_capable,
+                   state["consecutive_failures"], state["alert_active"])
+            )
+            print("alert failed to send: %s" % exc)
+            return 1
 
     save_state(args.state, state)
     print(

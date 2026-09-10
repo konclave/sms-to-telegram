@@ -1,8 +1,12 @@
 [Unit]
 Description=Check that the modem still has SMS (circuit-switched) service
 Documentation=https://github.com/konclave/sms-to-telegram
+OnFailure=quadlet-notify@%n.service
 
 [Service]
 Type=oneshot
+# Avoid leaving root-owned __pycache__/*.pyc behind in the developer's
+# checkout; this runs as root every 5 minutes from a directory the user owns.
+Environment=PYTHONDONTWRITEBYTECODE=1
 # Runs from the repo checkout so that git pull is the update path.
 ExecStart=/usr/bin/python3 __REPO_ROOT__/host/sms_modem_check.py

@@ -61,6 +61,10 @@ def main(argv=None) -> int:
     parser.add_argument("--timeout", type=float, default=180.0)
     args = parser.parse_args(argv)
 
+    if not os.path.exists(args.port):
+        print("modem not present at %s; nothing to re-register" % args.port)
+        return 1
+
     print("Recovery normally takes 1-3 minutes and passes through")
     print("srv_domain=4 with no signal. That is expected; wait it out.")
     ok = reregister(port=args.port, timeout=args.timeout)

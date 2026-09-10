@@ -1,6 +1,18 @@
 import sms_modem_reregister
 
 
+def test_main_reports_missing_modem_instead_of_a_traceback(tmp_path, capsys):
+    """Finding (Minor 6): anyone reaching for this handle already has a
+    misbehaving modem; os.open raising FileNotFoundError must not be the
+    first thing they see."""
+    missing_port = str(tmp_path / "no-such-port")
+    rc = sms_modem_reregister.main(["--port", missing_port])
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert missing_port in out
+    assert "not present" in out
+
+
 class FakeModem:
     """Answers AT commands; flips to CS+PS after `flip_after` SYSINFO polls."""
 

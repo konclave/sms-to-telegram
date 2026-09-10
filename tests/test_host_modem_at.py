@@ -81,6 +81,21 @@ def test_open_port_clears_hupcl_so_closing_does_not_reset_the_modem():
     assert not cflag & termios.HUPCL, "HUPCL still set: closing the port will reset the modem"
 
 
+def test_open_port_closes_fd_when_tcgetattr_raises():
+    """Finding (Minor 5): a fd opened before termios configuration must not
+    leak if tcgetattr/tcsetattr raises -- e.g. the modem re-enumerating or a
+    by-id symlink resolving to a non-tty."""
+    closed = []
+
+    with patch("sms_modem_at.os.open", return_value=7), \
+         patch("sms_modem_at.os.close", side_effect=closed.append), \
+         patch("sms_modem_at.termios.tcgetattr", side_effect=termios.error("not a tty")):
+        with pytest.raises(termios.error):
+            sms_modem_at.open_port("/dev/null")
+
+    assert closed == [7]
+
+
 def test_open_port_does_not_set_a_baud_rate():
     """The device rejects stty 115200 and baud is meaningless on USB serial."""
     captured = {}

@@ -72,12 +72,14 @@ def test_save_state_creates_parent_directory(tmp_path):
     assert json.loads(open(p).read())["consecutive_failures"] == 1
 
 
-def _run(capable_sequence, alert_after=2):
+def _run(capable_sequence, alert_after=2, srv_domain=2):
     """Drive evaluate() across a sequence of checks, as the timer would."""
     state = {"consecutive_failures": 0, "alert_active": False}
     alerts = []
     for capable in capable_sequence:
-        alerts.extend(sms_modem_check.evaluate(state, capable, alert_after=alert_after))
+        alerts.extend(
+            sms_modem_check.evaluate(state, capable, srv_domain, alert_after=alert_after)
+        )
     return alerts
 
 
@@ -117,6 +119,29 @@ def test_alert_text_names_the_remedy_with_a_runnable_path():
     assert "sms_modem_reregister.py" in alerts[0]
     assert "<repo>" not in alerts[0]
     assert "cd /" in alerts[0]
+
+
+def test_alert_reports_domain_zero_not_domain_two():
+    """Finding (Important 1): no service at all must not be mislabelled as
+    packet-switched-only. Domain 0 also gets a different hint, since there is
+    no network to re-register to."""
+    alerts = _run([False, False], srv_domain=0)
+    assert len(alerts) == 1
+    assert "srv_domain=0" in alerts[0]
+    assert "srv_domain=2" not in alerts[0]
+    assert "packet-switched" not in alerts[0]
+    assert "antenna" in alerts[0]
+
+
+def test_alert_reports_domain_four_not_domain_two():
+    """A genuinely stuck scan (srv_domain=4) must report its own domain, not
+    be mislabelled as packet-switched-only."""
+    alerts = _run([False, False], srv_domain=4)
+    assert len(alerts) == 1
+    assert "srv_domain=4" in alerts[0]
+    assert "srv_domain=2" not in alerts[0]
+    assert "packet-switched" not in alerts[0]
+    assert "sms_modem_reregister.py" in alerts[0]
 
 
 def test_reads_credentials_from_env_file(tmp_path):
@@ -276,3 +301,45 @@ def test_main_does_not_alert_when_the_query_fails(tmp_path, capsys):
         assert rc == 0
     assert sent == []
     assert "query failed" in capsys.readouterr().out
+
+
+def test_main_returns_nonzero_and_retries_when_send_alert_fails(tmp_path, capsys):
+    """Finding (Minor 3): a failing sender must not be latched as delivered,
+    must exit non-zero so OnFailure= fires, and must be retried on the next
+    successful run -- the same contract as the missing-credentials path."""
+    port = tmp_path / "port"
+    port.write_text("")
+    state = str(tmp_path / "state.json")
+    creds = tmp_path / "creds"
+    creds.write_text("BOT_TOKEN=t\nCHAT_ID=c\n")
+    sent = []
+
+    def fake_transport(commands):
+        return "^SYSINFO:2,2,1,3,1,0,3\nOK\n"
+
+    def failing_sender(url, data):
+        raise OSError("Telegram unreachable")
+
+    for _ in range(2):
+        rc = sms_modem_check.main(
+            ["--port", str(port), "--state", state, "--credentials", str(creds)],
+            transport=fake_transport,
+            sender=failing_sender,
+        )
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "alert failed to send" in out
+    assert "alert_active=False" in out
+    persisted = json.loads(open(state).read())
+    assert persisted["alert_active"] is False
+
+    # A later run with a working sender must still deliver the alert.
+    rc = sms_modem_check.main(
+        ["--port", str(port), "--state", state, "--credentials", str(creds)],
+        transport=fake_transport,
+        sender=lambda url, data: sent.append((url, data)),
+    )
+    assert rc == 0
+    assert len(sent) == 1
+    persisted = json.loads(open(state).read())
+    assert persisted["alert_active"] is True

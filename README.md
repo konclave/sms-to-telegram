@@ -106,7 +106,7 @@ persists. To inspect it by hand:
 sudo journalctl -u sms-modem-check.service -n 20
 ```
 
-A healthy line reads `srv_domain=3 sms_capable=True`.
+A healthy line reads `srv_domain=3 sms_capable=True failures=0 alert_active=False`.
 
 `srv_domain` values, from `AT^SYSINFO`:
 
@@ -118,6 +118,13 @@ A healthy line reads `srv_domain=3 sms_capable=True`.
 | 3 | CS+PS — normal | Yes |
 | 4 | Registering | Not yet |
 
+For a corroborating signal, `AT+CREG?` reports a separate `stat` value:
+`0` means the modem is not registered **and not even searching** for a
+network, `2` means it is searching, and `5` means it is registered while
+roaming. `stat=0` alongside `srv_domain=0` is what the original incident
+that motivated this check looked like — the modem was not merely between
+registrations, it had given up looking.
+
 ### Fixing it
 
 Force the modem to re-register:
@@ -128,7 +135,14 @@ cd /path/to/sms-to-telegram && sudo ./host/sms_modem_reregister.py
 
 This takes **1-3 minutes** and passes through `srv_domain=4` with **zero
 signal** on the way. That looks like a failure but is the normal recovery path —
-wait it out. It exits 0 once `srv_domain=3` is reached, or 1 on timeout.
+wait it out. It exits 0 once the modem is SMS-capable (`srv_domain` 1 or 3),
+or 1 on timeout.
+
+While it runs, the forwarder service itself will likely log modem errors and
+may restart one or more times during those 1-3 minutes — that is the same
+loss of signal the handle warns about, seen from the other process. It
+recovers on its own once circuit-switched service returns; it is not a sign
+that the handle broke anything.
 
 It is never run automatically: it drops the modem off the network for the
 duration, and if the network is genuinely refusing circuit-switched service,

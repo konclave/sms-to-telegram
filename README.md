@@ -350,6 +350,23 @@ Alerts fire only on state transitions — if the modem stays disconnected across
 
 If `gammu-smsd-monitor` is not installed or consistently fails, the monitor sends one alert and backs off — it does not flood Telegram.
 
+## Modem Re-enumeration Recovery
+
+The Huawei modem drops off the USB bus on its own and does not come back on the same tty name (`ttyUSB0` → `ttyUSB1` → …). `AddDevice` resolves the by-id symlink once, at container creation, so the running container is left holding a dead device node — only a restart reattaches it.
+
+`99-sms-modem-reattach.rules` triggers `sms-modem-reattach.service` when the `if00` port reappears. That unit does **not** restart immediately: re-enumeration comes in bursts, and the modem often drops again within a few seconds. `wait-for-modem-device.sh` (installed to `/usr/local/lib/sms-to-telegram/`) first waits for the device node to stay present continuously before the restart is issued:
+
+| Variable | Default | Meaning |
+| -------- | ------- | ------- |
+| `MODEM_DEVICE` | the by-id symlink | Device node to watch |
+| `MODEM_STABLE_SECONDS` | `8` | How long it must stay present |
+| `MODEM_WAIT_TIMEOUT` | `60` | Give up after this long |
+| `MODEM_POLL_INTERVAL` | `1` | Seconds between checks |
+
+This matters for alerting. A restart issued while the device is missing makes podman fail on the by-id symlink (`status=125`), and systemd reports that as a unit failure — which `OnFailure=quadlet-notify@` turns into a Telegram alert. Waiting for a stable device keeps a burst of re-enumerations to one restart instead of one per bounce, and keeps restarts from being issued into a missing device.
+
+`entrypoint.sh` runs as the container's PID 1. PID 1 is exempt from default signal actions — a signal with no handler installed is simply discarded — so the entrypoint installs an explicit `TERM`/`INT` trap. Without it podman's `StopSignal` is ignored, the stop times out into `SIGKILL`, and systemd records `status=137/n/a` and fires `OnFailure`, making every deliberate restart look like a crash.
+
 ## Troubleshooting
 
 1. Make sure your GSM modem is properly connected and recognized by the system
@@ -360,3 +377,4 @@ If `gammu-smsd-monitor` is not installed or consistently fails, the monitor send
 6. Inspect the queue volume if messages are stuck in `pending/` or `failed/`
 7. Check container logs for `event=worker_startup`, `event=delivery_retry`, `event=delivery_failed`, and `event=delivery_success`; modem monitor events are `event=monitor_startup`, `event=monitor_poll`, and `event=monitor_error`
 8. If messages stay in `processing/` after a crash, restart the container so the worker can recover them back into `pending/`
+9. A burst of `Quadlet Failure Alert` messages with `status=137/n/a` means the container is being SIGKILLed on stop rather than exiting cleanly — check that `entrypoint.sh` still traps `TERM`. Alerts with `status=125` and `stat /dev/serial/by-id/...: no such file or directory` mean a restart was issued while the modem was off the bus; check `journalctl -u sms-modem-reattach.service` and `journalctl -k | grep -c 'USB disconnect'`

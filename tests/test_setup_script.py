@@ -500,3 +500,53 @@ def test_setup_runs_podman_through_sudo(tmp_path):
 
     state = json.loads((repo / ".deploy" / "sms-to-telegram-state.json").read_text())
     assert state["image_id"] == "sha256:root-image"
+
+
+def test_setup_installs_modem_check_timer(tmp_path):
+    """The checker runs from the repo; only the units are installed, with
+    ExecStart pointing back at the checkout so git pull is the update path."""
+    repo_root = Path.cwd()
+    repo = prepare_repo_copy(tmp_path, repo_root)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    write_fake_bin(fake_bin, "udevadm", udevadm_stub_body())
+    log = tmp_path / "calls.log"
+
+    write_fake_bin(
+        fake_bin,
+        "podman",
+        "#!/bin/sh\n"
+        "if [ \"$1\" = image ] && [ \"$2\" = inspect ]; then echo 'sha256:x'; exit 0; fi\n"
+        "exit 0\n",
+    )
+    write_fake_bin(fake_bin, "sudo", "#!/bin/sh\nshift\nexec \"$@\"\n")
+    write_fake_bin(fake_bin, "systemctl", "#!/bin/sh\necho \"systemctl:$@\" >> \"$CALLS_LOG\"\nexit 0\n")
+    write_fake_bin(fake_bin, "install", install_stub_body())
+
+    env = os.environ | {
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "CALLS_LOG": str(log),
+        "QUADLET_DIR": str(tmp_path / "quadlet"),
+        "QUEUE_HOST_DIR": str(tmp_path / "queue"),
+        "UDEV_RULE_DIR": str(tmp_path / "udev"),
+        "SYSTEMD_UNIT_DIR": str(tmp_path / "units"),
+        "STATE_DIR": str(repo / ".deploy"),
+        "IMAGE_NAME": "ghcr.io/konclave/sms-to-telegram:latest",
+    }
+
+    result = subprocess.run(
+        ["bash", str(repo / "setup.sh")], cwd=tmp_path, env=env,
+        capture_output=True, text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    service = tmp_path / "units" / "sms-modem-check.service"
+    timer = tmp_path / "units" / "sms-modem-check.timer"
+    assert service.exists()
+    assert timer.exists()
+
+    # ExecStart must point at the checkout, not a copied file.
+    assert f"{repo}/host/sms_modem_check.py" in service.read_text()
+
+    calls = log.read_text()
+    assert "systemctl:enable --now sms-modem-check.timer" in calls

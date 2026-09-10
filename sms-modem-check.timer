@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodic modem SMS-service check
+
+[Timer]
+# The condition is rare and slow-moving; each check costs about a second.
+OnBootSec=5min
+OnUnitActiveSec=5min
+Unit=sms-modem-check.service
+
+[Install]
+WantedBy=timers.target

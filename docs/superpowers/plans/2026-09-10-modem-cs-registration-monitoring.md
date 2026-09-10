@@ -14,6 +14,9 @@
 
 - **No new dependencies.** `pyproject.toml` has `dependencies = []`. Do not add pyserial or anything else.
 - **`host/` modules must run on Python 3.12.** The host has 3.12.7; the project targets `>=3.14,<3.15`. Do not use syntax or stdlib APIs newer than 3.12 in `host/`.
+  Because `requires-python` excludes 3.12, the 3.12 test run must bypass the project:
+  `uv run --python 3.12 --no-project --with pytest==8.4.1 pytest <file>`. A plain
+  `uv run --python 3.12 pytest` fails on the version constraint.
 - **Address the modem by its by-id path**, never `/dev/ttyUSB2`. The correct path is `/dev/serial/by-id/usb-HUAWEI_Technologies_HUAWEI_Mobile-if01-port0`. Device names change on every re-enumeration.
 - **`HUPCL` must be cleared** on the serial port before use. Otherwise closing the port drops DTR and can reset the modem.
 - **Never set the baud rate.** The device rejects it and it is meaningless on USB serial.
@@ -322,7 +325,7 @@ Expected: PASS (10 tests)
 The host runs 3.12.7 while the project targets 3.14. A 3.14-only construct
 would pass above and fail only in production.
 
-Run: `uv run --python 3.12 pytest tests/test_host_modem_at.py -v`
+Run: `uv run --python 3.12 --no-project --with pytest==8.4.1 pytest tests/test_host_modem_at.py -v`
 Expected: PASS (10 tests)
 
 - [ ] **Step 11: Commit**
@@ -551,7 +554,7 @@ Expected: PASS (11 tests)
 
 - [ ] **Step 9: Verify on Python 3.12**
 
-Run: `uv run --python 3.12 pytest tests/test_host_modem_check.py -v`
+Run: `uv run --python 3.12 --no-project --with pytest==8.4.1 pytest tests/test_host_modem_check.py -v`
 Expected: PASS (11 tests)
 
 - [ ] **Step 10: Commit**
@@ -814,7 +817,7 @@ Expected: PASS (18 tests)
 
 - [ ] **Step 9: Verify on Python 3.12**
 
-Run: `uv run --python 3.12 pytest tests/test_host_modem_check.py -v`
+Run: `uv run --python 3.12 --no-project --with pytest==8.4.1 pytest tests/test_host_modem_check.py -v`
 Expected: PASS (18 tests)
 
 - [ ] **Step 10: Make it executable and commit**
@@ -1016,7 +1019,7 @@ Expected: PASS (6 tests)
 
 - [ ] **Step 5: Verify on Python 3.12**
 
-Run: `uv run --python 3.12 pytest tests/test_host_modem_reregister.py -v`
+Run: `uv run --python 3.12 --no-project --with pytest==8.4.1 pytest tests/test_host_modem_reregister.py -v`
 Expected: PASS (6 tests)
 
 - [ ] **Step 6: Make it executable and commit**

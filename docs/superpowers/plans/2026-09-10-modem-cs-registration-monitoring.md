@@ -427,15 +427,25 @@ _DEFAULT_STATE = {"consecutive_failures": 0, "alert_active": False}
 
 
 def load_state(path: str = STATE_PATH) -> dict:
+    """Never let a bad state file stop the check from running.
+
+    This runs unattended every few minutes, so every failure mode -- missing
+    file, invalid JSON, valid JSON of the wrong shape -- degrades to defaults.
+    """
     try:
         with open(path, "r", encoding="utf-8") as handle:
             data = json.load(handle)
-    except (OSError, ValueError):
+        if not isinstance(data, dict):
+            return dict(_DEFAULT_STATE)
+        failures = data.get("consecutive_failures", 0)
+        active = data.get("alert_active", False)
+        if not isinstance(failures, int) or isinstance(failures, bool):
+            failures = 0
+        if not isinstance(active, bool):
+            active = False
+        return {"consecutive_failures": failures, "alert_active": active}
+    except (OSError, ValueError, TypeError):
         return dict(_DEFAULT_STATE)
-    return {
-        "consecutive_failures": int(data.get("consecutive_failures", 0)),
-        "alert_active": bool(data.get("alert_active", False)),
-    }
 
 
 def save_state(path: str, state: dict) -> None:

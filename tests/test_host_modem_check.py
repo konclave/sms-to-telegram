@@ -18,6 +18,44 @@ def test_corrupt_state_file_yields_defaults(tmp_path):
     }
 
 
+def test_state_file_containing_a_json_list_yields_defaults(tmp_path):
+    """Valid JSON of the wrong shape must degrade to defaults, not crash."""
+    p = tmp_path / "state.json"
+    p.write_text("[]")
+    assert sms_modem_check.load_state(str(p)) == {
+        "consecutive_failures": 0,
+        "alert_active": False,
+    }
+
+
+def test_state_file_containing_json_null_yields_defaults(tmp_path):
+    p = tmp_path / "state.json"
+    p.write_text("null")
+    assert sms_modem_check.load_state(str(p)) == {
+        "consecutive_failures": 0,
+        "alert_active": False,
+    }
+
+
+def test_non_numeric_consecutive_failures_yields_default_failures(tmp_path):
+    p = tmp_path / "state.json"
+    p.write_text(json.dumps({"consecutive_failures": "abc", "alert_active": True}))
+    assert sms_modem_check.load_state(str(p)) == {
+        "consecutive_failures": 0,
+        "alert_active": True,
+    }
+
+
+def test_non_boolean_alert_active_yields_default_alert_active(tmp_path):
+    """A JSON string like "false" must not be truthy-coerced to True."""
+    p = tmp_path / "state.json"
+    p.write_text(json.dumps({"consecutive_failures": 3, "alert_active": "false"}))
+    assert sms_modem_check.load_state(str(p)) == {
+        "consecutive_failures": 3,
+        "alert_active": False,
+    }
+
+
 def test_state_round_trips(tmp_path):
     p = str(tmp_path / "state.json")
     sms_modem_check.save_state(p, {"consecutive_failures": 2, "alert_active": True})

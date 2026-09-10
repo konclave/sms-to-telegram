@@ -1,7 +1,7 @@
 # Modem CS-Registration Monitoring and Recovery
 
 Date: 2026-09-10
-Status: Design approved; spec under review
+Status: Approved
 
 ## Problem
 

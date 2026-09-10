@@ -85,6 +85,7 @@ The queue volume is strongly recommended. Without it, pending retries are lost w
 | GAMMU_CONFIG | Path to gammu config used by the modem monitor | `/etc/gammurc` |
 | SIGNAL_WARN_THRESHOLD | Signal strength % below which the modem monitor sends a low-signal alert | `20` |
 | MONITOR_INTERVAL_SECONDS | How often the modem monitor polls `gammu-smsd-monitor` | `60` |
+| UNREACHABLE_ALERT_AFTER | Consecutive polls with no modem before an unreachable alert is sent | `2` |
 
 ## Docker Images
 

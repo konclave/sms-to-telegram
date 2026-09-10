@@ -87,11 +87,11 @@ compute_source_fingerprint() {
 }
 
 image_exists() {
-  podman image exists "$IMAGE_NAME"
+  sudo -- podman image exists "$IMAGE_NAME"
 }
 
 inspect_image_id() {
-  podman image inspect "$IMAGE_NAME" --format '{{.Id}}' 2>/dev/null || echo ""
+  sudo -- podman image inspect "$IMAGE_NAME" --format '{{.Id}}' 2>/dev/null || echo ""
 }
 
 is_local_image() {
@@ -167,7 +167,7 @@ main() {
       echo "build triggered: $reason"
       (
         cd "$REPO_ROOT"
-        podman build -t "$IMAGE_NAME" .
+        sudo -- podman build -t "$IMAGE_NAME" .
       )
       built_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     else

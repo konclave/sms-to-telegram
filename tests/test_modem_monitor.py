@@ -205,16 +205,43 @@ def test_connection_lost_sends_one_alert():
 
 
 def test_connection_recovered_sends_recovery_alert():
-    alerts = _run_iterations([_lost(), _good()])
+    alerts = _run_iterations([_lost(), _lost(), _good()])
     assert len(alerts) == 2
     assert "unreachable" in alerts[0]
     assert "reachable again" in alerts[1]
 
 
+def test_single_unreachable_poll_does_not_alert():
+    """The monitor polls ~1s after startup, before gammu-smsd has connected.
+    Alerting on that first reading produced a false "unreachable" followed by
+    "reachable again" on every container restart."""
+    alerts = _run_iterations([_lost(), _good()])
+    assert alerts == []
+
+
+def test_two_consecutive_unreachable_polls_alert_once():
+    alerts = _run_iterations([_lost(), _lost(), _lost()])
+    assert len(alerts) == 1
+    assert "unreachable" in alerts[0]
+
+
+def test_recovery_after_sustained_unreachable_sends_one_recovery():
+    alerts = _run_iterations([_lost(), _lost(), _good()])
+    assert len(alerts) == 2
+    assert "unreachable" in alerts[0]
+    assert "reachable again" in alerts[1]
+
+
+def test_unreachable_streak_resets_on_a_good_reading():
+    """Alternating readings are a flapping modem, not a sustained outage."""
+    alerts = _run_iterations([_lost(), _good(), _lost(), _good()])
+    assert alerts == []
+
+
 def test_empty_imei_triggers_unreachable_alert():
     """gammu-smsd-monitor exposes no registration state, so an empty IMEI is
     the only signal that the daemon has not reached the modem."""
-    alerts = _run_iterations([_lost()])
+    alerts = _run_iterations([_lost(), _lost()])
     assert len(alerts) == 1
     assert "unreachable" in alerts[0]
 

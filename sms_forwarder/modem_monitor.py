@@ -80,8 +80,13 @@ class AlertState:
     than a reimplementation of it.
     """
 
-    def __init__(self, signal_threshold: int = 20):
+    def __init__(self, signal_threshold: int = 20, unreachable_alert_after: int = 2):
         self.signal_threshold = signal_threshold
+        # gammu-smsd needs a moment to reach the modem, and the first poll runs
+        # about a second after startup. Requiring consecutive failures keeps a
+        # restart -- or a brief modem bounce -- from raising a false alarm.
+        self.unreachable_alert_after = unreachable_alert_after
+        self.unreachable_streak = 0
         self.connection_alert_active = False
         self.signal_alert_active = False
         self.error_alert_active = False
@@ -103,12 +108,19 @@ class AlertState:
         assert status is not None
 
         connection_lost = not status.reachable
-        if connection_lost and not self.connection_alert_active:
-            alerts.append("Modem: unreachable (gammu-smsd reports no IMEI)")
-            self.connection_alert_active = True
-        elif not connection_lost and self.connection_alert_active:
-            alerts.append(f"Modem: reachable again (IMEI {status.imei})")
-            self.connection_alert_active = False
+        if connection_lost:
+            self.unreachable_streak += 1
+            if (
+                self.unreachable_streak >= self.unreachable_alert_after
+                and not self.connection_alert_active
+            ):
+                alerts.append("Modem: unreachable (gammu-smsd reports no IMEI)")
+                self.connection_alert_active = True
+        else:
+            self.unreachable_streak = 0
+            if self.connection_alert_active:
+                alerts.append(f"Modem: reachable again (IMEI {status.imei})")
+                self.connection_alert_active = False
 
         if connection_lost:
             # Signal figures are meaningless with no modem; hold the signal
@@ -138,16 +150,21 @@ def main() -> None:
     gammu_config = os.environ.get("GAMMU_CONFIG", "/etc/gammurc")
     signal_threshold = int(os.environ.get("SIGNAL_WARN_THRESHOLD", "20"))
     interval = float(os.environ.get("MONITOR_INTERVAL_SECONDS", "60"))
+    unreachable_after = int(os.environ.get("UNREACHABLE_ALERT_AFTER", "2"))
 
     client = TelegramClient(bot_token=bot_token)
 
-    state = AlertState(signal_threshold=signal_threshold)
+    state = AlertState(
+        signal_threshold=signal_threshold,
+        unreachable_alert_after=unreachable_after,
+    )
 
     print(
         f"event=monitor_startup"
         f" gammu_config={gammu_config}"
         f" signal_threshold={signal_threshold}"
         f" interval={interval}"
+        f" unreachable_alert_after={unreachable_after}"
     )
 
     while True:

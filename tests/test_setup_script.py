@@ -25,6 +25,14 @@ def install_stub_body() -> str:
     )
 
 
+def udevadm_stub_body() -> str:
+    return (
+        "#!/bin/sh\n"
+        "[ -n \"$CALLS_LOG\" ] && echo \"udevadm:$@\" >> \"$CALLS_LOG\"\n"
+        "exit 0\n"
+    )
+
+
 def prepare_repo_copy(tmp_path: Path, repo_root: Path) -> Path:
     target = tmp_path / "repo"
     subprocess.run(["cp", "-R", str(repo_root), str(target)], check=True)
@@ -50,6 +58,7 @@ def test_setup_creates_local_state_after_first_build(tmp_path):
     repo = prepare_repo_copy(tmp_path, repo_root)
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
+    write_fake_bin(fake_bin, "udevadm", udevadm_stub_body())
     log = tmp_path / "calls.log"
 
     write_fake_bin(
@@ -87,6 +96,9 @@ def test_setup_creates_local_state_after_first_build(tmp_path):
         "PATH": f"{fake_bin}:{os.environ['PATH']}",
         "CALLS_LOG": str(log),
         "QUADLET_DIR": str(tmp_path / "quadlet"),
+        "QUEUE_HOST_DIR": str(tmp_path / "queue"),
+        "UDEV_RULE_DIR": str(tmp_path / "udev"),
+        "SYSTEMD_UNIT_DIR": str(tmp_path / "units"),
         "STATE_DIR": str(repo / ".deploy"),
         "IMAGE_NAME": "localhost/sms-to-telegram:latest",
     }
@@ -115,6 +127,7 @@ def test_setup_fingerprint_changes_for_runtime_and_packaging_inputs(tmp_path):
     repo = prepare_repo_copy(tmp_path, repo_root)
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
+    write_fake_bin(fake_bin, "udevadm", udevadm_stub_body())
     log = tmp_path / "calls.log"
 
     write_fake_bin(
@@ -161,6 +174,9 @@ def test_setup_fingerprint_changes_for_runtime_and_packaging_inputs(tmp_path):
         "PATH": f"{fake_bin}:{os.environ['PATH']}",
         "CALLS_LOG": str(log),
         "QUADLET_DIR": str(tmp_path / "quadlet"),
+        "QUEUE_HOST_DIR": str(tmp_path / "queue"),
+        "UDEV_RULE_DIR": str(tmp_path / "udev"),
+        "SYSTEMD_UNIT_DIR": str(tmp_path / "units"),
         "STATE_DIR": str(state_dir),
         "IMAGE_NAME": "localhost/sms-to-telegram:latest",
     }
@@ -242,6 +258,7 @@ def test_setup_skips_build_when_image_exists_and_fingerprint_is_unchanged(tmp_pa
     repo = prepare_repo_copy(tmp_path, repo_root)
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
+    write_fake_bin(fake_bin, "udevadm", udevadm_stub_body())
     log = tmp_path / "calls.log"
 
     write_fake_bin(
@@ -279,6 +296,9 @@ def test_setup_skips_build_when_image_exists_and_fingerprint_is_unchanged(tmp_pa
         "PATH": f"{fake_bin}:{os.environ['PATH']}",
         "CALLS_LOG": str(log),
         "QUADLET_DIR": str(tmp_path / "quadlet"),
+        "QUEUE_HOST_DIR": str(tmp_path / "queue"),
+        "UDEV_RULE_DIR": str(tmp_path / "udev"),
+        "SYSTEMD_UNIT_DIR": str(tmp_path / "units"),
         "STATE_DIR": str(state_dir),
         "IMAGE_NAME": "localhost/sms-to-telegram:latest",
     }
@@ -297,6 +317,7 @@ def test_setup_skips_build_for_remote_image(tmp_path):
     repo = prepare_repo_copy(tmp_path, repo_root)
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
+    write_fake_bin(fake_bin, "udevadm", udevadm_stub_body())
     log = tmp_path / "calls.log"
 
     write_fake_bin(
@@ -315,9 +336,11 @@ def test_setup_skips_build_for_remote_image(tmp_path):
         "PATH": f"{fake_bin}:{os.environ['PATH']}",
         "CALLS_LOG": str(log),
         "QUADLET_DIR": str(tmp_path / "quadlet"),
+        "QUEUE_HOST_DIR": str(tmp_path / "queue"),
+        "UDEV_RULE_DIR": str(tmp_path / "udev"),
+        "SYSTEMD_UNIT_DIR": str(tmp_path / "units"),
         "STATE_DIR": str(repo / ".deploy"),
         "IMAGE_NAME": "ghcr.io/konclave/sms-to-telegram:latest",
-        "QUEUE_HOST_DIR": str(tmp_path / "queue"),
     }
 
     result = subprocess.run(["bash", str(repo / "setup.sh")], cwd=tmp_path, env=env, capture_output=True, text=True)
@@ -338,6 +361,7 @@ def test_setup_rebuilds_when_runtime_input_changes(tmp_path):
     repo = prepare_repo_copy(tmp_path, repo_root)
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
+    write_fake_bin(fake_bin, "udevadm", udevadm_stub_body())
     log = tmp_path / "calls.log"
 
     write_fake_bin(
@@ -367,6 +391,9 @@ def test_setup_rebuilds_when_runtime_input_changes(tmp_path):
         "PATH": f"{fake_bin}:{os.environ['PATH']}",
         "CALLS_LOG": str(log),
         "QUADLET_DIR": str(tmp_path / "quadlet"),
+        "QUEUE_HOST_DIR": str(tmp_path / "queue"),
+        "UDEV_RULE_DIR": str(tmp_path / "udev"),
+        "SYSTEMD_UNIT_DIR": str(tmp_path / "units"),
         "STATE_DIR": str(state_dir),
         "IMAGE_NAME": "localhost/sms-to-telegram:latest",
     }
@@ -376,3 +403,44 @@ def test_setup_rebuilds_when_runtime_input_changes(tmp_path):
     assert result.returncode == 0
     assert "build triggered: source fingerprint changed" in result.stdout
     assert "podman:build" in log.read_text()
+
+
+def test_setup_installs_modem_reattach_rule_and_unit(tmp_path):
+    """A re-enumerated modem is only recovered by a container restart, so the
+    udev rule and its oneshot unit must be deployed alongside the quadlet."""
+    repo_root = Path.cwd()
+    repo = prepare_repo_copy(tmp_path, repo_root)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    write_fake_bin(fake_bin, "udevadm", udevadm_stub_body())
+    log = tmp_path / "calls.log"
+
+    write_fake_bin(
+        fake_bin,
+        "podman",
+        "#!/bin/sh\n"
+        "echo \"podman:$@\" >> \"$CALLS_LOG\"\n"
+        "if [ \"$1\" = image ] && [ \"$2\" = inspect ]; then echo 'sha256:remote-image'; exit 0; fi\n"
+        "exit 0\n",
+    )
+    write_fake_bin(fake_bin, "sudo", "#!/bin/sh\nshift\nexec \"$@\"\n")
+    write_fake_bin(fake_bin, "systemctl", "#!/bin/sh\nexit 0\n")
+    write_fake_bin(fake_bin, "install", install_stub_body())
+
+    env = os.environ | {
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "CALLS_LOG": str(log),
+        "QUADLET_DIR": str(tmp_path / "quadlet"),
+        "QUEUE_HOST_DIR": str(tmp_path / "queue"),
+        "UDEV_RULE_DIR": str(tmp_path / "udev"),
+        "SYSTEMD_UNIT_DIR": str(tmp_path / "units"),
+        "STATE_DIR": str(repo / ".deploy"),
+        "IMAGE_NAME": "ghcr.io/konclave/sms-to-telegram:latest",
+    }
+
+    result = subprocess.run(["bash", str(repo / "setup.sh")], cwd=tmp_path, env=env, capture_output=True, text=True)
+
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "udev" / "99-sms-modem-reattach.rules").exists()
+    assert (tmp_path / "units" / "sms-modem-reattach.service").exists()
+    assert "udevadm:control --reload-rules" in log.read_text()

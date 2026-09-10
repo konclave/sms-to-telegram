@@ -1,0 +1,9 @@
+# The Huawei modem spontaneously re-enumerates and does not come back on the
+# same tty name (ttyUSB0 -> ttyUSB1 -> ttyUSB2). The container's /dev/ttyUSB0
+# is bind-mounted from the by-id symlink at container-creation time, so after a
+# re-enumeration it holds a dead device node that nothing inside the container
+# can re-resolve -- gammu fails with DEVICEWRITEERROR then DEVICEOPENERROR.
+#
+# Only a container restart re-resolves the symlink, so trigger one as soon as
+# the if00 port reappears rather than waiting for gammu to fail first.
+ACTION=="add", SUBSYSTEM=="tty", ENV{ID_VENDOR_ID}=="12d1", ENV{ID_MODEL_ID}=="1003", ENV{ID_USB_INTERFACE_NUM}=="00", TAG+="systemd", ENV{SYSTEMD_WANTS}="sms-modem-reattach.service"

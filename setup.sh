@@ -8,6 +8,10 @@ IMAGE_NAME="${IMAGE_NAME:-ghcr.io/konclave/sms-to-telegram:latest}"
 QUADLET_SOURCE="${QUADLET_SOURCE:-$REPO_ROOT/sms-to-telegram.container}"
 QUADLET_DIR="${QUADLET_DIR:-/etc/containers/systemd}"
 QUADLET_TARGET="$QUADLET_DIR/sms-to-telegram.container"
+UDEV_RULE_SOURCE="${UDEV_RULE_SOURCE:-$REPO_ROOT/99-sms-modem-reattach.rules}"
+UDEV_RULE_DIR="${UDEV_RULE_DIR:-/etc/udev/rules.d}"
+REATTACH_UNIT_SOURCE="${REATTACH_UNIT_SOURCE:-$REPO_ROOT/sms-modem-reattach.service}"
+SYSTEMD_UNIT_DIR="${SYSTEMD_UNIT_DIR:-/etc/systemd/system}"
 
 IMAGE_INPUTS=(
   Dockerfile
@@ -124,6 +128,15 @@ create_host_dirs() {
   sudo -- mkdir -p "$QUEUE_HOST_DIR"
 }
 
+# The modem re-enumerates on its own and does not return on the same tty name.
+# AddDevice resolves the by-id symlink only at container creation, so a restart
+# is the only way to reattach; this rule triggers one the moment it reappears.
+install_modem_reattach() {
+  sudo -- install -D -m 0644 "$REATTACH_UNIT_SOURCE" "$SYSTEMD_UNIT_DIR/sms-modem-reattach.service"
+  sudo -- install -D -m 0644 "$UDEV_RULE_SOURCE" "$UDEV_RULE_DIR/99-sms-modem-reattach.rules"
+  sudo -- udevadm control --reload-rules
+}
+
 restart_service() {
   sudo -- systemctl daemon-reload
   sudo -- systemctl restart sms-to-telegram.service
@@ -170,6 +183,7 @@ main() {
   image_id="$(inspect_image_id)"
   create_host_dirs
   install_quadlet_unit
+  install_modem_reattach
   restart_service
   deployed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   write_state_file "$fingerprint" "$image_id" "${built_at:-$deployed_at}" "$deployed_at"

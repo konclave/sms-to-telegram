@@ -1,6 +1,8 @@
 import termios
 from unittest.mock import patch
 
+import pytest
+
 import sms_modem_at
 from sms_modem_at import ServiceStatus, parse_sysinfo
 
@@ -95,3 +97,64 @@ def test_open_port_does_not_set_a_baud_rate():
 
     assert captured["attrs"][4] == termios.B9600
     assert captured["attrs"][5] == termios.B9600
+
+
+def test_query_transport_bypasses_hardware_entirely():
+    """When a transport is supplied, no real serial port is ever opened."""
+    with patch("sms_modem_at.os.open") as mock_open:
+        result = sms_modem_at.query(["AT^SYSINFO"], transport=lambda commands: "reply")
+
+    mock_open.assert_not_called()
+    assert result == "reply"
+
+
+def test_query_transport_receives_exact_command_list():
+    received = {}
+
+    def fake_transport(commands):
+        received["commands"] = commands
+        return ""
+
+    sms_modem_at.query(["AT^SYSINFO", "AT+COPS?"], transport=fake_transport)
+
+    assert received["commands"] == ["AT^SYSINFO", "AT+COPS?"]
+
+
+def test_query_concatenates_replies_from_multiple_commands_in_order():
+    """The hardware path drains after each command and joins the chunks in order."""
+    with patch("sms_modem_at.open_port", return_value=7), \
+         patch("sms_modem_at.os.write"), \
+         patch("sms_modem_at.os.close"), \
+         patch("sms_modem_at.time.sleep"), \
+         patch("sms_modem_at._drain", side_effect=["first reply\n", "second reply\n"]):
+        result = sms_modem_at.query(["AT^SYSINFO", "AT+COPS?"], port="/dev/fake")
+
+    assert result == "first reply\nsecond reply\n"
+
+
+def test_query_uses_diag_port_by_default():
+    captured = {}
+
+    def fake_open_port(path):
+        captured["port"] = path
+        return 7
+
+    with patch("sms_modem_at.open_port", side_effect=fake_open_port), \
+         patch("sms_modem_at.os.write"), \
+         patch("sms_modem_at.os.close"), \
+         patch("sms_modem_at.time.sleep"), \
+         patch("sms_modem_at._drain", return_value=""):
+        sms_modem_at.query(["AT^SYSINFO"])
+
+    assert captured["port"] == sms_modem_at.DIAG_PORT
+
+
+def test_drain_propagates_non_blocking_hardware_error():
+    """A real fault (e.g. ENODEV from a disconnected modem) must not be swallowed.
+
+    Only BlockingIOError (EAGAIN/EWOULDBLOCK) means "buffer empty, stop reading".
+    Any other OSError means the modem itself is gone or faulted.
+    """
+    with patch("sms_modem_at.os.read", side_effect=OSError(19, "No such device")):
+        with pytest.raises(OSError):
+            sms_modem_at._drain(7)

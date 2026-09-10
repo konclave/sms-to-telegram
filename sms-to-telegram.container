@@ -1,6 +1,10 @@
 [Unit]
 Description=SMS to Telegam Proxy Container
-# OnFailure=quadlet-notify@%n
+OnFailure=quadlet-notify@%n.service
+# A hung modem must not permanently stop the service. Disable systemd's start
+# rate limit so restarts continue indefinitely; the backoff below keeps the
+# retry (and its OnFailure alert) from flooding once the modem stays down.
+StartLimitIntervalSec=0
 
 [Container]
 ContainerName=sms-to-telegram
@@ -15,7 +19,9 @@ Volume=/var/lib/sms-to-telegram-queue:/var/spool/sms-forwarder:Z
 
 [Service]
 Restart=always
-RestartSec=5
+RestartSec=10
+RestartSteps=10
+RestartMaxDelaySec=1h
 
 [Install]
 WantedBy=multi-user.target default.target

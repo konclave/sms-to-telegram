@@ -12,6 +12,8 @@ UDEV_RULE_SOURCE="${UDEV_RULE_SOURCE:-$REPO_ROOT/99-sms-modem-reattach.rules}"
 UDEV_RULE_DIR="${UDEV_RULE_DIR:-/etc/udev/rules.d}"
 REATTACH_UNIT_SOURCE="${REATTACH_UNIT_SOURCE:-$REPO_ROOT/sms-modem-reattach.service}"
 SYSTEMD_UNIT_DIR="${SYSTEMD_UNIT_DIR:-/etc/systemd/system}"
+DEVICE_WAIT_SOURCE="${DEVICE_WAIT_SOURCE:-$REPO_ROOT/wait-for-modem-device.sh}"
+HELPER_DIR="${HELPER_DIR:-/usr/local/lib/sms-to-telegram}"
 CHECK_SERVICE_SOURCE="${CHECK_SERVICE_SOURCE:-$REPO_ROOT/sms-modem-check.service}"
 CHECK_TIMER_SOURCE="${CHECK_TIMER_SOURCE:-$REPO_ROOT/sms-modem-check.timer}"
 
@@ -134,6 +136,9 @@ create_host_dirs() {
 # AddDevice resolves the by-id symlink only at container creation, so a restart
 # is the only way to reattach; this rule triggers one the moment it reappears.
 install_modem_reattach() {
+  # The unit is installed verbatim, so its ExecStartPre helper must land at the
+  # fixed path the unit names rather than in the checkout.
+  sudo -- install -D -m 0755 "$DEVICE_WAIT_SOURCE" "$HELPER_DIR/wait-for-modem-device.sh"
   sudo -- install -D -m 0644 "$REATTACH_UNIT_SOURCE" "$SYSTEMD_UNIT_DIR/sms-modem-reattach.service"
   sudo -- install -D -m 0644 "$UDEV_RULE_SOURCE" "$UDEV_RULE_DIR/99-sms-modem-reattach.rules"
   sudo -- udevadm control --reload-rules

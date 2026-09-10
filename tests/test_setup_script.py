@@ -117,6 +117,7 @@ def test_setup_creates_local_state_after_first_build(tmp_path):
         "QUEUE_HOST_DIR": str(tmp_path / "queue"),
         "UDEV_RULE_DIR": str(tmp_path / "udev"),
         "SYSTEMD_UNIT_DIR": str(tmp_path / "units"),
+        "HELPER_DIR": str(tmp_path / "helpers"),
         "STATE_DIR": str(repo / ".deploy"),
         "IMAGE_NAME": "localhost/sms-to-telegram:latest",
     }
@@ -195,6 +196,7 @@ def test_setup_fingerprint_changes_for_runtime_and_packaging_inputs(tmp_path):
         "QUEUE_HOST_DIR": str(tmp_path / "queue"),
         "UDEV_RULE_DIR": str(tmp_path / "udev"),
         "SYSTEMD_UNIT_DIR": str(tmp_path / "units"),
+        "HELPER_DIR": str(tmp_path / "helpers"),
         "STATE_DIR": str(state_dir),
         "IMAGE_NAME": "localhost/sms-to-telegram:latest",
     }
@@ -305,6 +307,7 @@ def test_setup_skips_build_when_image_exists_and_fingerprint_is_unchanged(tmp_pa
         "QUEUE_HOST_DIR": str(tmp_path / "queue"),
         "UDEV_RULE_DIR": str(tmp_path / "udev"),
         "SYSTEMD_UNIT_DIR": str(tmp_path / "units"),
+        "HELPER_DIR": str(tmp_path / "helpers"),
         "STATE_DIR": str(state_dir),
         "IMAGE_NAME": "localhost/sms-to-telegram:latest",
     }
@@ -345,6 +348,7 @@ def test_setup_skips_build_for_remote_image(tmp_path):
         "QUEUE_HOST_DIR": str(tmp_path / "queue"),
         "UDEV_RULE_DIR": str(tmp_path / "udev"),
         "SYSTEMD_UNIT_DIR": str(tmp_path / "units"),
+        "HELPER_DIR": str(tmp_path / "helpers"),
         "STATE_DIR": str(repo / ".deploy"),
         "IMAGE_NAME": "ghcr.io/konclave/sms-to-telegram:latest",
     }
@@ -400,6 +404,7 @@ def test_setup_rebuilds_when_runtime_input_changes(tmp_path):
         "QUEUE_HOST_DIR": str(tmp_path / "queue"),
         "UDEV_RULE_DIR": str(tmp_path / "udev"),
         "SYSTEMD_UNIT_DIR": str(tmp_path / "units"),
+        "HELPER_DIR": str(tmp_path / "helpers"),
         "STATE_DIR": str(state_dir),
         "IMAGE_NAME": "localhost/sms-to-telegram:latest",
     }
@@ -440,6 +445,7 @@ def test_setup_installs_modem_reattach_rule_and_unit(tmp_path):
         "QUEUE_HOST_DIR": str(tmp_path / "queue"),
         "UDEV_RULE_DIR": str(tmp_path / "udev"),
         "SYSTEMD_UNIT_DIR": str(tmp_path / "units"),
+        "HELPER_DIR": str(tmp_path / "helpers"),
         "STATE_DIR": str(repo / ".deploy"),
         "IMAGE_NAME": "ghcr.io/konclave/sms-to-telegram:latest",
     }
@@ -486,6 +492,7 @@ def test_setup_runs_podman_through_sudo(tmp_path):
         "QUEUE_HOST_DIR": str(tmp_path / "queue"),
         "UDEV_RULE_DIR": str(tmp_path / "udev"),
         "SYSTEMD_UNIT_DIR": str(tmp_path / "units"),
+        "HELPER_DIR": str(tmp_path / "helpers"),
         "STATE_DIR": str(repo / ".deploy"),
         "IMAGE_NAME": "localhost/sms-to-telegram:latest",
     }
@@ -530,6 +537,7 @@ def test_setup_installs_modem_check_timer(tmp_path):
         "QUEUE_HOST_DIR": str(tmp_path / "queue"),
         "UDEV_RULE_DIR": str(tmp_path / "udev"),
         "SYSTEMD_UNIT_DIR": str(tmp_path / "units"),
+        "HELPER_DIR": str(tmp_path / "helpers"),
         "STATE_DIR": str(repo / ".deploy"),
         "IMAGE_NAME": "ghcr.io/konclave/sms-to-telegram:latest",
     }
@@ -550,3 +558,50 @@ def test_setup_installs_modem_check_timer(tmp_path):
 
     calls = log.read_text()
     assert "systemctl:enable --now sms-modem-check.timer" in calls
+
+
+def test_setup_installs_the_modem_device_wait_helper(tmp_path):
+    """sms-modem-reattach.service is installed verbatim, so the helper it calls
+    in ExecStartPre must land at the fixed path the unit names."""
+    repo_root = Path.cwd()
+    repo = prepare_repo_copy(tmp_path, repo_root)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    write_fake_bin(fake_bin, "udevadm", udevadm_stub_body())
+    log = tmp_path / "calls.log"
+
+    write_fake_bin(
+        fake_bin,
+        "podman",
+        "#!/bin/sh\n"
+        "if [ \"$1\" = image ] && [ \"$2\" = inspect ]; then echo 'sha256:x'; exit 0; fi\n"
+        "exit 0\n",
+    )
+    write_fake_bin(fake_bin, "sudo", "#!/bin/sh\nshift\nexec \"$@\"\n")
+    write_fake_bin(fake_bin, "systemctl", "#!/bin/sh\nexit 0\n")
+    write_fake_bin(fake_bin, "install", install_stub_body())
+
+    env = os.environ | {
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "CALLS_LOG": str(log),
+        "QUADLET_DIR": str(tmp_path / "quadlet"),
+        "QUEUE_HOST_DIR": str(tmp_path / "queue"),
+        "UDEV_RULE_DIR": str(tmp_path / "udev"),
+        "SYSTEMD_UNIT_DIR": str(tmp_path / "units"),
+        "HELPER_DIR": str(tmp_path / "helpers"),
+        "STATE_DIR": str(repo / ".deploy"),
+        "IMAGE_NAME": "ghcr.io/konclave/sms-to-telegram:latest",
+    }
+
+    result = subprocess.run(
+        ["bash", str(repo / "setup.sh")], cwd=tmp_path, env=env,
+        capture_output=True, text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    helper = tmp_path / "helpers" / "wait-for-modem-device.sh"
+    assert helper.exists()
+    assert helper.stat().st_mode & 0o111
+
+    unit = (tmp_path / "units" / "sms-modem-reattach.service").read_text()
+    assert "/usr/local/lib/sms-to-telegram/wait-for-modem-device.sh" in unit

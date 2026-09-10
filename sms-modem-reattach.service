@@ -4,8 +4,13 @@ Documentation=https://github.com/konclave/sms-to-telegram
 
 [Service]
 Type=oneshot
-# Let enumeration settle: the modem often bounces several times in a row, and
-# a oneshot that is already running coalesces further triggers instead of
-# restarting the forwarder once per bounce.
-ExecStartPre=/usr/bin/sleep 5
+# The modem re-enumerates in bursts, so wait for the device node to hold still
+# before restarting. A restart issued mid-burst fails on the missing by-id
+# symlink and systemd reports that as a unit failure the notifier alerts on.
+# A oneshot that is already waiting also coalesces further udev triggers, so a
+# burst produces one restart instead of one per bounce.
+ExecStartPre=/usr/local/lib/sms-to-telegram/wait-for-modem-device.sh
 ExecStart=/usr/bin/systemctl restart sms-to-telegram.service
+# Must outlast the helper's own 60s wait so the timeout that fires is the
+# helper's, which explains itself in the journal.
+TimeoutStartSec=120

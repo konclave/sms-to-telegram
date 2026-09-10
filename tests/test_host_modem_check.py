@@ -1,5 +1,6 @@
 import json
 
+import sms_modem_at
 import sms_modem_check
 
 
@@ -116,3 +117,96 @@ def test_alert_text_names_the_remedy_with_a_runnable_path():
     assert "sms_modem_reregister.py" in alerts[0]
     assert "<repo>" not in alerts[0]
     assert "cd /" in alerts[0]
+
+
+def test_reads_credentials_from_env_file(tmp_path):
+    p = tmp_path / "notify.env"
+    p.write_text('BOT_TOKEN=123:abc\nCHAT_ID=-100999\n')
+    token, chat = sms_modem_check.read_credentials(str(p))
+    assert token == "123:abc"
+    assert chat == "-100999"
+
+
+def test_credentials_tolerate_quotes_and_blank_lines(tmp_path):
+    p = tmp_path / "notify.env"
+    p.write_text('\n# comment\nBOT_TOKEN="123:abc"\n\nCHAT_ID=\'-100999\'\n')
+    assert sms_modem_check.read_credentials(str(p)) == ("123:abc", "-100999")
+
+
+def test_missing_credentials_file_returns_none(tmp_path):
+    assert sms_modem_check.read_credentials(str(tmp_path / "nope")) == (None, None)
+
+
+def test_main_exits_quietly_when_the_modem_is_absent(tmp_path, capsys):
+    """Modem absence is covered by the udev rule; this check is only about a
+    modem that is present but not CS-registered."""
+    rc = sms_modem_check.main([
+        "--port", str(tmp_path / "no-such-port"),
+        "--state", str(tmp_path / "state.json"),
+        "--credentials", str(tmp_path / "creds"),
+    ])
+    assert rc == 0
+    assert "not present" in capsys.readouterr().out
+
+
+def test_main_alerts_after_two_ps_only_readings(tmp_path):
+    port = tmp_path / "port"
+    port.write_text("")
+    sent = []
+    state = str(tmp_path / "state.json")
+    creds = tmp_path / "creds"
+    creds.write_text("BOT_TOKEN=t\nCHAT_ID=c\n")
+
+    def fake_transport(commands):
+        return "^SYSINFO:2,2,1,3,1,0,3\nOK\n"
+
+    for _ in range(2):
+        rc = sms_modem_check.main(
+            ["--port", str(port), "--state", state, "--credentials", str(creds)],
+            transport=fake_transport,
+            sender=lambda url, data: sent.append((url, data)),
+        )
+        assert rc == 0
+
+    assert len(sent) == 1
+    assert b"packet-switched" in sent[0][1]
+
+
+def test_main_is_silent_while_sms_service_is_healthy(tmp_path):
+    port = tmp_path / "port"
+    port.write_text("")
+    sent = []
+    creds = tmp_path / "creds"
+    creds.write_text("BOT_TOKEN=t\nCHAT_ID=c\n")
+
+    for _ in range(3):
+        sms_modem_check.main(
+            ["--port", str(port), "--state", str(tmp_path / "s.json"),
+             "--credentials", str(creds)],
+            transport=lambda commands: "^SYSINFO:2,3,1,3,1,0,3\nOK\n",
+            sender=lambda url, data: sent.append((url, data)),
+        )
+    assert sent == []
+
+
+def test_main_does_not_alert_when_the_query_fails(tmp_path, capsys):
+    """A checker fault is not a modem fault. Never alert about ourselves."""
+    port = tmp_path / "port"
+    port.write_text("")
+    sent = []
+    creds = tmp_path / "creds"
+    creds.write_text("BOT_TOKEN=t\nCHAT_ID=c\n")
+
+    def boom(commands):
+        raise OSError("port busy")
+
+    for _ in range(3):
+        rc = sms_modem_check.main(
+            ["--port", str(port), "--state", str(tmp_path / "s.json"),
+             "--credentials", str(creds)],
+            transport=boom,
+            sender=lambda url, data: sent.append((url, data)),
+        )
+        assert rc == 0
+    assert sent == []
+    assert "query failed" in capsys.readouterr().out

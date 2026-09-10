@@ -14,14 +14,32 @@ from sms_forwarder.modem_monitor import (
 )
 from sms_forwarder.telegram_api import RetryableDeliveryError, TerminalDeliveryError
 
-_FULL_OUTPUT = """\
-Name               : HUAWEI Mobile
-Manufacturer       : Huawei
-Model              : E173
-Signal strength    : -89 dBm (34 %)
-Network            : O2 - CZ (home, UMTS)
-Charge state       : not connected to charger
-Battery level      : 0 %
+# Captured verbatim from `gammu-smsd-monitor -c /etc/gammurc -n 1 -d 1`
+# running against the deployed image on the host.
+_REAL_OUTPUT = """\
+gammu-smsd-monitor[196]: Mapped POSIX RO shared memory at 0x7f8b2982e000
+Client: Gammu 1.43.2 on Linux, kernel 6.19.11-200.fc43.x86_64 compiler GCC 15.2
+PhoneID: 
+IMEI: 358192014259454
+IMSI: 250016504607187
+Sent: 0
+Received: 0
+Failed: 0
+BatterPercent: 0
+NetworkSignal: 33
+"""
+
+# gammu-smsd publishes empty identity fields when it has not reached the phone.
+_UNREACHABLE_OUTPUT = """\
+Client: Gammu 1.43.2 on Linux
+PhoneID: 
+IMEI: 
+IMSI: 
+Sent: 0
+Received: 0
+Failed: 0
+BatterPercent: 0
+NetworkSignal: 0
 """
 
 
@@ -30,57 +48,45 @@ Battery level      : 0 %
 # ---------------------------------------------------------------------------
 
 
-def test_parse_full_output_extracts_signal_and_network():
-    s = parse_monitor_output(_FULL_OUTPUT)
-    assert s.signal_percent == 34
-    assert s.network_state == "home, umts"
+def test_parse_reads_signal_from_network_signal_field():
+    """gammu-smsd-monitor reports `NetworkSignal: N`, not the `Signal strength`
+    line that `gammu --monitor` prints."""
+    s = parse_monitor_output(_REAL_OUTPUT)
+    assert s.signal_percent == 33
 
 
-def test_parse_output_searching():
-    text = "Network            : (searching)\n"
-    s = parse_monitor_output(text)
-    assert s.network_state == "searching"
+def test_parse_reads_imei():
+    s = parse_monitor_output(_REAL_OUTPUT)
+    assert s.imei == "358192014259454"
 
 
-def test_parse_output_not_registered():
-    text = "Network            : (not registered)\n"
-    s = parse_monitor_output(text)
-    assert s.network_state == "not registered"
+def test_parse_treats_populated_imei_as_reachable():
+    assert parse_monitor_output(_REAL_OUTPUT).reachable is True
 
 
-def test_parse_output_roaming():
-    text = "Signal strength    : -70 dBm (60 %)\nNetwork            : Vodafone (roaming, GPRS)\n"
-    s = parse_monitor_output(text)
-    assert s.signal_percent == 60
-    assert s.network_state == "roaming, gprs"
+def test_parse_treats_empty_imei_as_unreachable():
+    """An empty IMEI means gammu-smsd never got an answer from the modem."""
+    s = parse_monitor_output(_UNREACHABLE_OUTPUT)
+    assert s.imei is None
+    assert s.reachable is False
 
 
-def test_parse_missing_signal_line():
-    text = "Network            : O2 (home, GPRS)\n"
-    s = parse_monitor_output(text)
-    assert s.signal_percent is None
-    assert s.network_state == "home, gprs"
+def test_parse_reads_zero_signal():
+    assert parse_monitor_output(_UNREACHABLE_OUTPUT).signal_percent == 0
 
 
-def test_parse_missing_network_line():
-    text = "Signal strength    : -67 dBm (73 %)\n"
-    s = parse_monitor_output(text)
-    assert s.signal_percent == 73
-    assert s.network_state is None
-
-
-def test_parse_empty_output():
+def test_parse_empty_output_is_unreachable():
     s = parse_monitor_output("")
-    assert s == ModemStatus(signal_percent=None, network_state=None)
+    assert s == ModemStatus(signal_percent=None, imei=None)
+    assert s.reachable is False
 
 
-def test_parse_malformed_signal_no_percent():
-    text = "Signal strength    : unknown\n"
-    s = parse_monitor_output(text)
-    assert s.signal_percent is None
+def test_parse_ignores_network_signal_when_naming_a_network_state():
+    """`NetworkSignal:` must not be mistaken for a network-state field."""
+    s = parse_monitor_output(_REAL_OUTPUT)
+    assert not hasattr(s, "network_state")
 
 
-# ---------------------------------------------------------------------------
 # run_monitor subprocess tests
 # ---------------------------------------------------------------------------
 
@@ -88,12 +94,12 @@ def test_parse_malformed_signal_no_percent():
 def test_run_monitor_returns_status_on_success():
     proc = MagicMock()
     proc.returncode = 0
-    proc.stdout = _FULL_OUTPUT
+    proc.stdout = _REAL_OUTPUT
     with patch("sms_forwarder.modem_monitor.subprocess.run", return_value=proc):
         status, err = run_monitor("/etc/gammurc")
     assert err is None
     assert status is not None
-    assert status.signal_percent == 34
+    assert status.signal_percent == 33
 
 
 def test_run_monitor_bounds_the_monitor_to_a_single_loop():
@@ -105,7 +111,7 @@ def test_run_monitor_bounds_the_monitor_to_a_single_loop():
     """
     proc = MagicMock()
     proc.returncode = 0
-    proc.stdout = _FULL_OUTPUT
+    proc.stdout = _REAL_OUTPUT
     with patch("sms_forwarder.modem_monitor.subprocess.run", return_value=proc) as run:
         run_monitor("/etc/gammurc")
 
@@ -155,61 +161,35 @@ def _make_client(alerts: list[str]) -> MagicMock:
     return client
 
 
-def _good(signal: int = 50, state: str = "home") -> ModemStatus:
-    return ModemStatus(signal_percent=signal, network_state=state)
+_IMEI = "358192014259454"
 
 
-def _lost(state: str = "searching") -> ModemStatus:
-    return ModemStatus(signal_percent=50, network_state=state)
+def _good(signal: int = 50, imei: str = _IMEI) -> ModemStatus:
+    return ModemStatus(signal_percent=signal, imei=imei)
+
+
+def _lost(signal: int = 0) -> ModemStatus:
+    """gammu-smsd reachable, but it has no identity for the modem."""
+    return ModemStatus(signal_percent=signal, imei=None)
 
 
 def _run_iterations(
     statuses: list[ModemStatus | None],
     *,
     signal_threshold: int = 20,
-    chat_id: str = "123",
 ) -> list[str]:
-    """Drive the monitor state machine for the given sequence of statuses.
+    """Drive the real AlertState over a sequence of polls.
 
-    Each item is either a ModemStatus (tool success) or None (tool error).
-    Returns the list of alert texts sent.
+    Each item is a ModemStatus (tool success) or None (tool error). Returns the
+    alert texts production would send.
     """
     from sms_forwarder import modem_monitor as mm
 
+    state = mm.AlertState(signal_threshold=signal_threshold)
     alerts: list[str] = []
-    client = _make_client(alerts)
-
-    connection_alert_active = False
-    signal_alert_active = False
-    error_alert_active = False
-
     for status in statuses:
-        if status is None:
-            if not error_alert_active:
-                mm._send_alert(client, chat_id, "Modem: monitor tool failing")
-                error_alert_active = True
-            continue
-
-        if error_alert_active:
-            mm._send_alert(client, chat_id, "Modem: monitor tool recovered")
-            error_alert_active = False
-
-        connection_lost = status.network_state in mm._LOST_STATES or status.network_state is None
-        if connection_lost and not connection_alert_active:
-            mm._send_alert(client, chat_id, f"Modem: network connection lost (state: {status.network_state or 'unknown'})")
-            connection_alert_active = True
-        elif not connection_lost and connection_alert_active:
-            mm._send_alert(client, chat_id, f"Modem: network connection restored (state: {status.network_state})")
-            connection_alert_active = False
-
-        signal_low = status.signal_percent is not None and status.signal_percent < signal_threshold
-        if signal_low and not signal_alert_active:
-            mm._send_alert(client, chat_id, f"Modem: signal low ({status.signal_percent}% — below threshold {signal_threshold}%)")
-            signal_alert_active = True
-        elif not signal_low and signal_alert_active and status.signal_percent is not None:
-            mm._send_alert(client, chat_id, f"Modem: signal recovered ({status.signal_percent}%)")
-            signal_alert_active = False
-
+        error_msg = None if status is not None else "gammu-smsd-monitor timed out after 30s"
+        alerts.extend(state.evaluate(status, error_msg))
     return alerts
 
 
@@ -221,25 +201,27 @@ def test_no_alert_on_first_good_reading():
 def test_connection_lost_sends_one_alert():
     alerts = _run_iterations([_lost(), _lost()])
     assert len(alerts) == 1
-    assert "connection lost" in alerts[0]
+    assert "unreachable" in alerts[0]
 
 
 def test_connection_recovered_sends_recovery_alert():
     alerts = _run_iterations([_lost(), _good()])
     assert len(alerts) == 2
-    assert "connection lost" in alerts[0]
-    assert "connection restored" in alerts[1]
+    assert "unreachable" in alerts[0]
+    assert "reachable again" in alerts[1]
 
 
-def test_not_registered_triggers_connection_lost():
-    alerts = _run_iterations([_lost("not registered")])
+def test_empty_imei_triggers_unreachable_alert():
+    """gammu-smsd-monitor exposes no registration state, so an empty IMEI is
+    the only signal that the daemon has not reached the modem."""
+    alerts = _run_iterations([_lost()])
     assert len(alerts) == 1
-    assert "not registered" in alerts[0]
+    assert "unreachable" in alerts[0]
 
 
 def test_signal_low_sends_one_alert():
     alerts = _run_iterations(
-        [ModemStatus(10, "home"), ModemStatus(10, "home")],
+        [ModemStatus(10, _IMEI), ModemStatus(10, _IMEI)],
         signal_threshold=20,
     )
     assert len(alerts) == 1
@@ -248,7 +230,7 @@ def test_signal_low_sends_one_alert():
 
 def test_signal_recovered_sends_recovery_alert():
     alerts = _run_iterations(
-        [ModemStatus(10, "home"), ModemStatus(50, "home")],
+        [ModemStatus(10, _IMEI), ModemStatus(50, _IMEI)],
         signal_threshold=20,
     )
     assert len(alerts) == 2
@@ -257,7 +239,7 @@ def test_signal_recovered_sends_recovery_alert():
 
 
 def test_no_spurious_recovery_when_signal_line_absent_and_no_prior_alert():
-    alerts = _run_iterations([ModemStatus(None, "home")])
+    alerts = _run_iterations([ModemStatus(None, _IMEI)])
     assert alerts == []
 
 
@@ -277,7 +259,7 @@ def test_error_recovery_sends_recovery_alert():
 def test_signal_state_held_during_tool_errors():
     # Signal was low, then tool fails — no spurious recovery
     alerts = _run_iterations(
-        [ModemStatus(10, "home"), None],
+        [ModemStatus(10, _IMEI), None],
         signal_threshold=20,
     )
     # First alert: signal low; second: tool failing — NO signal recovery

@@ -10,10 +10,19 @@ being unable to receive a single SMS.
 """
 from __future__ import annotations
 
+import argparse
 import json
 import os
+import sys
+import urllib.parse
+import urllib.request
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import sms_modem_at  # noqa: E402
 
 STATE_PATH = "/var/lib/sms-modem-check/state.json"
+CREDENTIALS_PATH = "/etc/systemd-notify.env"
 
 _DEFAULT_STATE = {"consecutive_failures": 0, "alert_active": False}
 
@@ -80,3 +89,84 @@ def evaluate(state: dict, sms_capable: bool, *, alert_after: int = 2) -> list[st
         alerts.append(_ALERT_RESTORED)
         state["alert_active"] = False
     return alerts
+
+
+def read_credentials(path: str = CREDENTIALS_PATH) -> tuple:
+    token = None
+    chat = None
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            lines = handle.readlines()
+    except OSError:
+        return (None, None)
+
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        value = value.strip().strip('"').strip("'")
+        if key.strip() == "BOT_TOKEN":
+            token = value
+        elif key.strip() == "CHAT_ID":
+            chat = value
+    return (token, chat)
+
+
+def send_alert(bot_token: str, chat_id: str, text: str, *, sender=None) -> None:
+    url = "https://api.telegram.org/bot%s/sendMessage" % bot_token
+    data = urllib.parse.urlencode({"chat_id": chat_id, "text": text}).encode("utf-8")
+    if sender is not None:
+        sender(url, data)
+        return
+    request = urllib.request.Request(url, data=data, method="POST")
+    with urllib.request.urlopen(request, timeout=15):
+        pass
+
+
+def main(argv=None, *, transport=None, sender=None) -> int:
+    parser = argparse.ArgumentParser(description="Alert when the modem loses SMS service.")
+    parser.add_argument("--port", default=sms_modem_at.DIAG_PORT)
+    parser.add_argument("--state", default=STATE_PATH)
+    parser.add_argument("--credentials", default=CREDENTIALS_PATH)
+    parser.add_argument("--alert-after", type=int, default=2)
+    args = parser.parse_args(argv)
+
+    if not os.path.exists(args.port):
+        print("modem not present at %s; nothing to check" % args.port)
+        return 0
+
+    try:
+        raw = sms_modem_at.query(["AT^SYSINFO"], port=args.port, transport=transport)
+    except OSError as exc:
+        # A checker fault is not a modem fault: say so, alert nobody.
+        print("query failed: %s" % exc)
+        return 0
+
+    status = sms_modem_at.parse_sysinfo(raw)
+    if status.srv_domain is None:
+        print("query failed: no ^SYSINFO in reply")
+        return 0
+
+    state = load_state(args.state)
+    alerts = evaluate(state, status.sms_capable, alert_after=args.alert_after)
+    save_state(args.state, state)
+
+    print(
+        "srv_domain=%s sms_capable=%s failures=%s alert_active=%s"
+        % (status.srv_domain, status.sms_capable,
+           state["consecutive_failures"], state["alert_active"])
+    )
+
+    if alerts:
+        token, chat = read_credentials(args.credentials)
+        if not token or not chat:
+            print("alert suppressed: credentials unavailable")
+            return 0
+        for text in alerts:
+            send_alert(token, chat, text, sender=sender)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

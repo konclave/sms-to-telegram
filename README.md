@@ -87,6 +87,54 @@ The queue volume is strongly recommended. Without it, pending retries are lost w
 | MONITOR_INTERVAL_SECONDS | How often the modem monitor polls `gammu-smsd-monitor` | `60` |
 | UNREACHABLE_ALERT_AFTER | Consecutive polls with no modem before an unreachable alert is sent | `2` |
 
+## Troubleshooting: no SMS arriving, but everything looks healthy
+
+If the service is running, the queue is empty, the log shows no errors and the
+modem reports good signal — but no SMS have arrived for hours or days — check
+whether the modem still has **SMS service**, which is not the same thing as
+having a signal.
+
+SMS are delivered over the **circuit-switched** domain. A modem can be
+registered for **packet-switched** service only: data works, the signal looks
+fine, the SIM is valid, and no SMS can ever arrive. `gammu-smsd-monitor` cannot
+see this — it reports no registration state at all.
+
+The periodic check (`sms-modem-check.timer`) alerts to Telegram when this
+persists. To inspect it by hand:
+
+```bash
+sudo journalctl -u sms-modem-check.service -n 20
+```
+
+A healthy line reads `srv_domain=3 sms_capable=True`.
+
+`srv_domain` values, from `AT^SYSINFO`:
+
+| Value | Meaning | SMS work? |
+| ----- | ------- | --------- |
+| 0 | No service | No |
+| 1 | CS only | Yes |
+| 2 | **PS only** — data but no SMS | **No** |
+| 3 | CS+PS — normal | Yes |
+| 4 | Registering | Not yet |
+
+### Fixing it
+
+Force the modem to re-register:
+
+```bash
+cd /path/to/sms-to-telegram && sudo ./host/sms_modem_reregister.py
+```
+
+This takes **1-3 minutes** and passes through `srv_domain=4` with **zero
+signal** on the way. That looks like a failure but is the normal recovery path —
+wait it out. It exits 0 once `srv_domain=3` is reached, or 1 on timeout.
+
+It is never run automatically: it drops the modem off the network for the
+duration, and if the network is genuinely refusing circuit-switched service,
+retrying would inflict repeated outages without fixing anything. If it times
+out twice, the problem is with the carrier or the SIM, not the modem.
+
 ## Docker Images
 
 The repository can be built locally from either `Dockerfile` or `Dockerfile.alpine`.

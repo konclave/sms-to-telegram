@@ -100,13 +100,19 @@ def query(
 
 
 def _drain(fd: int) -> str:
+    """Read all currently-available bytes from `fd` without blocking.
+
+    `BlockingIOError` (EAGAIN/EWOULDBLOCK) just means the read buffer is
+    empty right now, which is the normal way this loop ends. Any other
+    `OSError` (e.g. ENODEV, EIO) means the modem itself is gone or faulted
+    and must propagate rather than be swallowed as silently truncated
+    output.
+    """
     out = []
     while True:
         try:
             data = os.read(fd, 4096)
         except BlockingIOError:
-            break
-        except OSError:
             break
         if not data:
             break

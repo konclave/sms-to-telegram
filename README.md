@@ -86,6 +86,7 @@ The queue volume is strongly recommended. Without it, pending retries are lost w
 | SIGNAL_WARN_THRESHOLD | Signal strength % below which the modem monitor sends a low-signal alert | `20` |
 | MONITOR_INTERVAL_SECONDS | How often the modem monitor polls `gammu-smsd-monitor` | `60` |
 | UNREACHABLE_ALERT_AFTER | Consecutive polls with no modem before an unreachable alert is sent | `2` |
+| SHUTDOWN_GRACE_SECONDS | How long the entrypoint waits for its children on stop before SIGKILLing them | `5` |
 
 ## Troubleshooting: no SMS arriving, but everything looks healthy
 
@@ -366,6 +367,8 @@ The Huawei modem drops off the USB bus on its own and does not come back on the 
 This matters for alerting. A restart issued while the device is missing makes podman fail on the by-id symlink (`status=125`), and systemd reports that as a unit failure — which `OnFailure=quadlet-notify@` turns into a Telegram alert. Waiting for a stable device keeps a burst of re-enumerations to one restart instead of one per bounce, and keeps restarts from being issued into a missing device.
 
 `entrypoint.sh` runs as the container's PID 1. PID 1 is exempt from default signal actions — a signal with no handler installed is simply discarded — so the entrypoint installs an explicit `TERM`/`INT` trap. Without it podman's `StopSignal` is ignored, the stop times out into `SIGKILL`, and systemd records `status=137/n/a` and fires `OnFailure`, making every deliberate restart look like a crash.
+
+The trap alone is not enough. `gammu-smsd` blocked on a dead USB tty never acts on `SIGTERM`, and because the modem re-enumerates constantly that is the state a restart usually finds it in. Waiting on it without a bound only moves the stall to podman's stop timeout, producing the same `status=137`. The teardown therefore waits `SHUTDOWN_GRACE_SECONDS` (default 5), then `SIGKILL`s the children and exits 0 on its own terms — exiting PID 1 tears down the container's PID namespace, so even a child stuck in uninterruptible sleep cannot hold the stop open. A child dying on its own still falls through to `exit 1`, so genuine failures keep alerting.
 
 ## Troubleshooting
 

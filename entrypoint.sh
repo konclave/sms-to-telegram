@@ -34,10 +34,34 @@ monitor_pid=$!
 # podman's StopSignal is ignored, the stop times out into SIGKILL, and systemd
 # records status=137 and fires OnFailure -- so every deliberate restart pages
 # the operator as if the service had crashed.
+SHUTDOWN_GRACE_SECONDS=${SHUTDOWN_GRACE_SECONDS:-5}
+
+children_running() {
+  kill -0 "$worker_pid" 2>/dev/null \
+    || kill -0 "$gammu_pid" 2>/dev/null \
+    || kill -0 "$monitor_pid" 2>/dev/null
+}
+
 terminate() {
   trap - TERM INT
   kill "$worker_pid" "$gammu_pid" "$monitor_pid" 2>/dev/null || true
-  wait "$worker_pid" "$gammu_pid" "$monitor_pid" 2>/dev/null || true
+
+  # gammu-smsd blocked on a dead USB tty never acts on SIGTERM, and the modem
+  # re-enumerates constantly, so that is the state a restart usually finds it
+  # in. Waiting on it without a bound just moves the stall: podman's stop
+  # timeout expires, PID 1 is SIGKILLed, and systemd records status=137 --
+  # which is the crash alert this trap exists to prevent. Give the children a
+  # short grace period, then stop waiting on them.
+  waited=0
+  while [ "$waited" -lt "$SHUTDOWN_GRACE_SECONDS" ] && children_running; do
+    sleep 1 &
+    wait "$!" 2>/dev/null || true
+    waited=$((waited + 1))
+  done
+  kill -KILL "$worker_pid" "$gammu_pid" "$monitor_pid" 2>/dev/null || true
+
+  # Exiting here tears down the container's PID namespace, so a child still
+  # stuck in uninterruptible sleep cannot hold the stop open either.
   exit 0
 }
 trap terminate TERM INT

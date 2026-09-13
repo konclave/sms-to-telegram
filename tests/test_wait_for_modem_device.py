@@ -100,3 +100,42 @@ def test_reattach_unit_waits_for_a_stable_device_instead_of_sleeping(tmp_path):
     assert "ExecStartPre=/usr/bin/sleep 5" not in unit
     assert "/usr/local/lib/sms-to-telegram/wait-for-modem-device.sh" in unit
     assert "ExecStart=/usr/bin/systemctl restart sms-to-telegram.service" in unit
+
+
+def _default_of(name: str) -> int:
+    """Read a default out of the helper's ${VAR:-default} expansion."""
+    import re
+
+    script = HELPER.read_text()
+    match = re.search(rf"^{name}=\$\{{MODEM_{name}:-(\d+)\}}$", script, re.MULTILINE)
+    assert match, f"no default found for {name}"
+    return int(match.group(1))
+
+
+def test_stability_window_outlasts_the_observed_flap_period():
+    """The modem re-enumerates about every 26s when it is misbehaving.
+
+    An 8s window is satisfied by nearly every bounce, so a restart is issued
+    into a device that dies ~10s later -- the container start then fails and
+    the notifier alerts. The window has to be long enough that only a modem
+    that has genuinely settled can satisfy it.
+    """
+    assert _default_of("STABLE_SECONDS") > 26
+
+
+def test_the_wait_spans_several_flap_cycles():
+    """Requiring a long stable window is only useful if the helper keeps
+    waiting through the flapping; a timeout at or near the window would just
+    give up on the first cycle."""
+    assert _default_of("WAIT_TIMEOUT") >= 4 * _default_of("STABLE_SECONDS")
+
+
+def test_reattach_unit_timeout_outlasts_the_helper_wait():
+    """The unit must let the helper's own timeout fire, so the journal carries
+    the helper's explanation rather than a bare systemd timeout."""
+    import re
+
+    unit = Path("sms-modem-reattach.service").read_text()
+    match = re.search(r"^TimeoutStartSec=(\d+)$", unit, re.MULTILINE)
+    assert match, "reattach unit must bound its start"
+    assert int(match.group(1)) > _default_of("WAIT_TIMEOUT")

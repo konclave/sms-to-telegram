@@ -360,11 +360,37 @@ The Huawei modem drops off the USB bus on its own and does not come back on the 
 | Variable | Default | Meaning |
 | -------- | ------- | ------- |
 | `MODEM_DEVICE` | the by-id symlink | Device node to watch |
-| `MODEM_STABLE_SECONDS` | `8` | How long it must stay present |
-| `MODEM_WAIT_TIMEOUT` | `60` | Give up after this long |
+| `MODEM_STABLE_SECONDS` | `45` | How long it must stay present |
+| `MODEM_WAIT_TIMEOUT` | `300` | Give up after this long |
 | `MODEM_POLL_INTERVAL` | `1` | Seconds between checks |
 
 This matters for alerting. A restart issued while the device is missing makes podman fail on the by-id symlink (`status=125`), and systemd reports that as a unit failure — which `OnFailure=quadlet-notify@` turns into a Telegram alert. Waiting for a stable device keeps a burst of re-enumerations to one restart instead of one per bounce, and keeps restarts from being issued into a missing device.
+
+**The window must be read against the modem's measured flap period.** The original `8s` was chosen against "drops again within a few seconds", but a misbehaving modem drops roughly every **26s** — so the window was satisfied by nearly every bounce. A restart was then issued into a device with about 10s left to live, and a container start takes 5–10s. Measured over 24h that produced:
+
+| | per 24h |
+| --- | --- |
+| Kernel USB events | 7743 |
+| `sms-modem-reattach.service` runs | 1677 |
+| `sms-to-telegram.service` failures | 1079 |
+| Telegram alerts | 1079 |
+
+A window *longer* than the flap period cannot be satisfied by a flapping modem at all, so no restart is issued while the modem is unusable — and the one that is issued, once it genuinely settles, lands on a device that survives the start. `MODEM_WAIT_TIMEOUT` is correspondingly long so the oneshot keeps waiting across several flap cycles rather than giving up on the first; `TimeoutStartSec` in the unit must stay above it so the helper's own timeout is what fires.
+
+## Failure Alert Throttling
+
+`systemd-notify-on-failure.sh` (installed to `/usr/local/lib/systemd-notify/on-failure.sh`) is the `OnFailure=quadlet-notify@` handler shared by every quadlet on the host. It alerts on a *transition* into failure, not on every failure.
+
+The original version sent unconditionally. That assumes failures are rare; for `sms-to-telegram` a failing modem makes failure the steady state, and the script turned one hardware fault into 2396 Telegram messages — enough to bury every real message in the channel.
+
+| Variable | Default | Meaning |
+| -------- | ------- | ------- |
+| `NOTIFY_COOLDOWN_SECONDS` | `3600` | Minimum gap between alerts for one unit |
+| `NOTIFY_STATE_DIR` | `/var/lib/systemd-notify` | Per-unit cooldown state |
+| `NOTIFY_LOG` | `/var/log/quadlet-failures.log` | Local audit trail |
+| `NOTIFY_ENV_FILE` | `/etc/systemd-notify.env` | `BOT_TOKEN` / `CHAT_ID` |
+
+Within the cooldown a failure is counted, not sent; the next alert past the window carries `⏸ N further failures suppressed in the previous M min`. Each unit is throttled independently, and **the local log still records every failure** — only the Telegram send is throttled, so a suppressed alert stays recoverable from the host. At the rate measured above this turns 1079 alerts a day into 24.
 
 `entrypoint.sh` runs as the container's PID 1. PID 1 is exempt from default signal actions — a signal with no handler installed is simply discarded — so the entrypoint installs an explicit `TERM`/`INT` trap. Without it podman's `StopSignal` is ignored, the stop times out into `SIGKILL`, and systemd records `status=137/n/a` and fires `OnFailure`, making every deliberate restart look like a crash.
 

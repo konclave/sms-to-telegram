@@ -118,6 +118,7 @@ def test_setup_creates_local_state_after_first_build(tmp_path):
         "UDEV_RULE_DIR": str(tmp_path / "udev"),
         "SYSTEMD_UNIT_DIR": str(tmp_path / "units"),
         "HELPER_DIR": str(tmp_path / "helpers"),
+        "NOTIFY_DIR": str(tmp_path / "notify"),
         "STATE_DIR": str(repo / ".deploy"),
         "IMAGE_NAME": "localhost/sms-to-telegram:latest",
     }
@@ -197,6 +198,7 @@ def test_setup_fingerprint_changes_for_runtime_and_packaging_inputs(tmp_path):
         "UDEV_RULE_DIR": str(tmp_path / "udev"),
         "SYSTEMD_UNIT_DIR": str(tmp_path / "units"),
         "HELPER_DIR": str(tmp_path / "helpers"),
+        "NOTIFY_DIR": str(tmp_path / "notify"),
         "STATE_DIR": str(state_dir),
         "IMAGE_NAME": "localhost/sms-to-telegram:latest",
     }
@@ -308,6 +310,7 @@ def test_setup_skips_build_when_image_exists_and_fingerprint_is_unchanged(tmp_pa
         "UDEV_RULE_DIR": str(tmp_path / "udev"),
         "SYSTEMD_UNIT_DIR": str(tmp_path / "units"),
         "HELPER_DIR": str(tmp_path / "helpers"),
+        "NOTIFY_DIR": str(tmp_path / "notify"),
         "STATE_DIR": str(state_dir),
         "IMAGE_NAME": "localhost/sms-to-telegram:latest",
     }
@@ -349,6 +352,7 @@ def test_setup_skips_build_for_remote_image(tmp_path):
         "UDEV_RULE_DIR": str(tmp_path / "udev"),
         "SYSTEMD_UNIT_DIR": str(tmp_path / "units"),
         "HELPER_DIR": str(tmp_path / "helpers"),
+        "NOTIFY_DIR": str(tmp_path / "notify"),
         "STATE_DIR": str(repo / ".deploy"),
         "IMAGE_NAME": "ghcr.io/konclave/sms-to-telegram:latest",
     }
@@ -405,6 +409,7 @@ def test_setup_rebuilds_when_runtime_input_changes(tmp_path):
         "UDEV_RULE_DIR": str(tmp_path / "udev"),
         "SYSTEMD_UNIT_DIR": str(tmp_path / "units"),
         "HELPER_DIR": str(tmp_path / "helpers"),
+        "NOTIFY_DIR": str(tmp_path / "notify"),
         "STATE_DIR": str(state_dir),
         "IMAGE_NAME": "localhost/sms-to-telegram:latest",
     }
@@ -446,6 +451,7 @@ def test_setup_installs_modem_reattach_rule_and_unit(tmp_path):
         "UDEV_RULE_DIR": str(tmp_path / "udev"),
         "SYSTEMD_UNIT_DIR": str(tmp_path / "units"),
         "HELPER_DIR": str(tmp_path / "helpers"),
+        "NOTIFY_DIR": str(tmp_path / "notify"),
         "STATE_DIR": str(repo / ".deploy"),
         "IMAGE_NAME": "ghcr.io/konclave/sms-to-telegram:latest",
     }
@@ -493,6 +499,7 @@ def test_setup_runs_podman_through_sudo(tmp_path):
         "UDEV_RULE_DIR": str(tmp_path / "udev"),
         "SYSTEMD_UNIT_DIR": str(tmp_path / "units"),
         "HELPER_DIR": str(tmp_path / "helpers"),
+        "NOTIFY_DIR": str(tmp_path / "notify"),
         "STATE_DIR": str(repo / ".deploy"),
         "IMAGE_NAME": "localhost/sms-to-telegram:latest",
     }
@@ -538,6 +545,7 @@ def test_setup_installs_modem_check_timer(tmp_path):
         "UDEV_RULE_DIR": str(tmp_path / "udev"),
         "SYSTEMD_UNIT_DIR": str(tmp_path / "units"),
         "HELPER_DIR": str(tmp_path / "helpers"),
+        "NOTIFY_DIR": str(tmp_path / "notify"),
         "STATE_DIR": str(repo / ".deploy"),
         "IMAGE_NAME": "ghcr.io/konclave/sms-to-telegram:latest",
     }
@@ -589,6 +597,7 @@ def test_setup_installs_the_modem_device_wait_helper(tmp_path):
         "UDEV_RULE_DIR": str(tmp_path / "udev"),
         "SYSTEMD_UNIT_DIR": str(tmp_path / "units"),
         "HELPER_DIR": str(tmp_path / "helpers"),
+        "NOTIFY_DIR": str(tmp_path / "notify"),
         "STATE_DIR": str(repo / ".deploy"),
         "IMAGE_NAME": "ghcr.io/konclave/sms-to-telegram:latest",
     }

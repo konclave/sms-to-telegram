@@ -11,6 +11,6 @@ Type=oneshot
 # burst produces one restart instead of one per bounce.
 ExecStartPre=/usr/local/lib/sms-to-telegram/wait-for-modem-device.sh
 ExecStart=/usr/bin/systemctl restart sms-to-telegram.service
-# Must outlast the helper's own 60s wait so the timeout that fires is the
+# Must outlast the helper's own 300s wait so the timeout that fires is the
 # helper's, which explains itself in the journal.
-TimeoutStartSec=120
+TimeoutStartSec=360

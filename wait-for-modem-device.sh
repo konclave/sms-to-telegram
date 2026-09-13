@@ -8,11 +8,19 @@
 # records the start as a unit failure, and the notifier turns that into an
 # alert. Waiting for the device to hold still keeps a burst to one restart and
 # keeps a restart from being issued into a missing device.
+#
+# The window has to be read against the modem's measured flap period. While it
+# is misbehaving it drops roughly every 26s, and a container start takes about
+# 5-10s: an 8s window was satisfied by nearly every bounce, so a restart was
+# issued into a device with ~10s left to live. That produced ~1700 restarts and
+# ~1080 failed starts a day, each one a Telegram alert. A window longer than
+# the flap period cannot be satisfied by a flapping modem at all, so the
+# forwarder is restarted when the modem has actually settled and not before.
 set -u
 
 DEVICE=${MODEM_DEVICE:-/dev/serial/by-id/usb-HUAWEI_Technologies_HUAWEI_Mobile-if00-port0}
-STABLE_SECONDS=${MODEM_STABLE_SECONDS:-8}
-WAIT_TIMEOUT=${MODEM_WAIT_TIMEOUT:-60}
+STABLE_SECONDS=${MODEM_STABLE_SECONDS:-45}
+WAIT_TIMEOUT=${MODEM_WAIT_TIMEOUT:-300}
 POLL_INTERVAL=${MODEM_POLL_INTERVAL:-1}
 
 # POSIX sh has no fractional arithmetic, so count polls rather than seconds.

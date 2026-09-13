@@ -16,6 +16,8 @@ DEVICE_WAIT_SOURCE="${DEVICE_WAIT_SOURCE:-$REPO_ROOT/wait-for-modem-device.sh}"
 HELPER_DIR="${HELPER_DIR:-/usr/local/lib/sms-to-telegram}"
 CHECK_SERVICE_SOURCE="${CHECK_SERVICE_SOURCE:-$REPO_ROOT/sms-modem-check.service}"
 CHECK_TIMER_SOURCE="${CHECK_TIMER_SOURCE:-$REPO_ROOT/sms-modem-check.timer}"
+NOTIFY_SCRIPT_SOURCE="${NOTIFY_SCRIPT_SOURCE:-$REPO_ROOT/systemd-notify-on-failure.sh}"
+NOTIFY_DIR="${NOTIFY_DIR:-/usr/local/lib/systemd-notify}"
 
 IMAGE_INPUTS=(
   Dockerfile
@@ -144,6 +146,14 @@ install_modem_reattach() {
   sudo -- udevadm control --reload-rules
 }
 
+# The OnFailure notifier is shared by every quadlet on this host, so it lived
+# outside version control until a re-enumerating modem turned it into a source
+# of 1000+ Telegram messages a day. Install it from here so the throttle is
+# reproducible rather than a hand-edit on the host.
+install_failure_notifier() {
+  sudo -- install -D -m 0755 "$NOTIFY_SCRIPT_SOURCE" "$NOTIFY_DIR/on-failure.sh"
+}
+
 # The checker runs from the repo checkout; only the units are installed, with
 # ExecStart rewritten to this checkout's path.
 install_modem_check() {
@@ -207,6 +217,7 @@ main() {
   install_quadlet_unit
   install_modem_reattach
   install_modem_check
+  install_failure_notifier
   restart_service
   deployed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   write_state_file "$fingerprint" "$image_id" "${built_at:-$deployed_at}" "$deployed_at"
